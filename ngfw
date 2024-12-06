@@ -1,19 +1,17 @@
 #!/bin/bash
 
-#!/bin/bash
-
 # Define variables for tools' installation paths and other settings
 SURICATA_CONF="/etc/suricata/suricata.yaml"
 ZEOK_CONF="/opt/zeek/etc/zeekctl.cfg"
 MALTRAIL_CONF="/etc/maltrail/maltrail.conf"
 MALDETECT_CONF="/usr/local/maldetect/conf.maldet"
+wondershaper="/usr/sbin/wondershaper"
 
 # Functions to install packages
 install_packages() {
-    # Update the system and install required packages
     echo "Updating system and installing necessary packages..."
     zypper ref && zypper up -y
-    zypper -n install  iptables suricata zeek clamav maldet maltrail python3-pip
+    zypper -n install iptables suricata zeek clamav maldet maltrail python3-pip
 }
 
 # Function to configure iptables firewall
@@ -41,6 +39,29 @@ configure_firewall() {
 
     # Save iptables rules
     iptables-save > /etc/iptables/rules.v4
+}
+
+# Function to create a firewall rule
+create_firewall_rule() {
+    echo "Creating firewall rule..."
+    if [ -n "$2" ] && [ -n "$3" ]; then
+        iptables -A INPUT -p tcp --dport "$2" -s "$3" -j ACCEPT
+        echo "Rule added: Allowing TCP traffic on port $2 from $3"
+    else
+        echo "Usage: --create-rule <port> <source_ip>"
+    fi
+}
+
+# Function to create a zone in iptables
+create_zone() {
+    echo "Creating iptables zone..."
+    if [ -n "$2" ]; then
+        iptables -N "$2"
+        iptables -A "$2" -j ACCEPT
+        echo "Zone '$2' created and accepting traffic."
+    else
+        echo "Usage: --create-zone <zone_name>"
+    fi
 }
 
 # Function to start Suricata (IDS/IPS)
@@ -83,32 +104,51 @@ start_maltrail() {
     systemctl status maltrail
 }
 
-# Main script execution
+# Function to manage bandwidth using wondershaper
+manage_bandwidth() {
+    echo "Managing bandwidth using wondershaper..."
+    if [ -n "$2" ] && [ -n "$3" ]; then
+        $wondershaper "$2" "$3"  # Interface and bandwidth limit (in Kbps)
+        echo "Bandwidth limit set: $3 Kbps on interface $2"
+    else
+        echo "Usage: --bandwidth <interface> <limit_in_kbps>"
+    fi
+}
 
-# Step 1: Install all necessary packages
-install_packages
+# Main script execution based on user input
 
-# Step 2: Configure the firewall with iptables
-configure_firewall
-
-# Step 3: Start Suricata for traffic analysis
-start_suricata
-
-# Step 4: Start Zeek for traffic sniffing
-start_zeek
-
-# Step 5: Run ClamAV to scan files for malware
-scan_files_clamav
-
-# Step 6: Run Maldet to scan for malware
-scan_files_maldet
-
-# Step 7: Start Maltrail for monitoring malicious IPs
-start_maltrail
-
-echo "All services have been configured and started."
-
-# Optional: Use cronjobs or systemd timers to automate file scanning and IP monitoring
-echo "Consider setting up cron jobs or systemd timers to periodically scan files and monitor IPs."
+if [ "$1" == "--firewall" ]; then
+    if [ "$2" == "--create-rule" ]; then
+        create_firewall_rule "$@"
+    elif [ "$2" == "--create-zone" ]; then
+        create_zone "$@"
+    else
+        echo "Firewall command not found. Usage: --firewall --create-rule <port> <source_ip> or --create-zone <zone_name>"
+    fi
+elif [ "$1" == "--scan-av" ]; then
+    if [ "$2" == "--file" ]; then
+        scan_files_clamav
+    elif [ "$2" == "--dir" ]; then
+        scan_files_clamav
+    else
+        echo "AV scan command not found. Usage: --scan-av --file or --scan-av --dir"
+    fi
+elif [ "$1" == "--bandwidth" ]; then
+    manage_bandwidth "$@"
+elif [ "$1" == "--sniff" ]; then
+    echo "Starting network sniffing..."
+    start_suricata
+    start_zeek
+elif [ "$1" == "--install" ]; then
+    install_packages
+else
+    echo "Invalid command. Available commands:"
+    echo "--firewall --create-rule <port> <source_ip>"
+    echo "--firewall --create-zone <zone_name>"
+    echo "--scan-av --file or --dir"
+    echo "--bandwidth <interface> <limit_in_kbps>"
+    echo "--sniff"
+    echo "--install"
+fi
 
 
