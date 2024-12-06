@@ -1,0 +1,114 @@
+#!/bin/bash
+
+#!/bin/bash
+
+# Define variables for tools' installation paths and other settings
+SURICATA_CONF="/etc/suricata/suricata.yaml"
+ZEOK_CONF="/opt/zeek/etc/zeekctl.cfg"
+MALTRAIL_CONF="/etc/maltrail/maltrail.conf"
+MALDETECT_CONF="/usr/local/maldetect/conf.maldet"
+
+# Functions to install packages
+install_packages() {
+    # Update the system and install required packages
+    echo "Updating system and installing necessary packages..."
+    zypper ref && zypper up -y
+    zypper -n install  iptables suricata zeek clamav maldet maltrail python3-pip
+}
+
+# Function to configure iptables firewall
+configure_firewall() {
+    echo "Configuring iptables firewall..."
+    # Flush existing rules and set default policies to drop
+    iptables -F
+    iptables -P INPUT DROP
+    iptables -P FORWARD DROP
+    iptables -P OUTPUT ACCEPT
+
+    # Allow traffic from localhost
+    iptables -A INPUT -i lo -j ACCEPT
+    iptables -A OUTPUT -o lo -j ACCEPT
+
+    # Allow incoming SSH (port 22)
+    iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+
+    # Allow incoming HTTP (port 80) and HTTPS (port 443)
+    iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+    iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+
+    # Allow ICMP (ping)
+    iptables -A INPUT -p icmp --icmp-type 8 -j ACCEPT
+
+    # Save iptables rules
+    iptables-save > /etc/iptables/rules.v4
+}
+
+# Function to start Suricata (IDS/IPS)
+start_suricata() {
+    echo "Starting Suricata for network traffic analysis..."
+    systemctl enable suricata
+    systemctl start suricata
+    # Ensure Suricata is running
+    systemctl status suricata
+}
+
+# Function to start Zeek (formerly Bro) (Network Analysis)
+start_zeek() {
+    echo "Starting Zeek for network traffic sniffing..."
+    zeekctl deploy
+    # Ensure Zeek is running
+    zeekctl status
+}
+
+# Function to scan files with ClamAV
+scan_files_clamav() {
+    echo "Scanning files with ClamAV..."
+    freshclam  # Update ClamAV database
+    clamscan -r /home /var/www /etc --exclude-dir=/proc --exclude-dir=/sys --exclude-dir=/dev
+}
+
+# Function to scan for malware with Maldet
+scan_files_maldet() {
+    echo "Scanning files with Maldet (Linux Malware Detect)..."
+    maldet --update
+    maldet --scan-all /home /var/www
+}
+
+# Function to start Maltrail (IP Monitoring)
+start_maltrail() {
+    echo "Starting Maltrail for IP Monitoring..."
+    systemctl enable maltrail
+    systemctl start maltrail
+    # Ensure Maltrail is running
+    systemctl status maltrail
+}
+
+# Main script execution
+
+# Step 1: Install all necessary packages
+install_packages
+
+# Step 2: Configure the firewall with iptables
+configure_firewall
+
+# Step 3: Start Suricata for traffic analysis
+start_suricata
+
+# Step 4: Start Zeek for traffic sniffing
+start_zeek
+
+# Step 5: Run ClamAV to scan files for malware
+scan_files_clamav
+
+# Step 6: Run Maldet to scan for malware
+scan_files_maldet
+
+# Step 7: Start Maltrail for monitoring malicious IPs
+start_maltrail
+
+echo "All services have been configured and started."
+
+# Optional: Use cronjobs or systemd timers to automate file scanning and IP monitoring
+echo "Consider setting up cron jobs or systemd timers to periodically scan files and monitor IPs."
+
+
