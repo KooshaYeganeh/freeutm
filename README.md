@@ -193,6 +193,11 @@ zeek --version
 ```
 url : https://www.howtoforge.com/how-to-install-zeek-network-security-monitoring-tool-on-ubuntu-22-04/
 
+
+![bro-scripts](https://github.com/zeek/bro-scripts)
+![bro-scripts2](https://github.com/michalpurzynski/zeek-scripts)
+
+
 ## snort
 
 ```
@@ -254,7 +259,7 @@ sudo apt install clamav -y
 ```
 
 ```
-0 2 * * * /usr/bin/clamscan -r / --exclude-dir="^/sys" --exclude-dir="^/proc" --log=/var/log/clamav-scan.log
+0 2 * * * /usr/bin/clamscan --remove --recursive --infected / --exclude-dir="^/sys" --exclude-dir="^/proc" --log=/var/log/clamav-scan.log
 ```
 
 ## maldet
