@@ -1,0 +1,425 @@
+#!/bin/bash
+
+
+
+
+## iptables
+
+
+
+sudo iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 22 -j ACCEPT  # Allow SSH
+sudo iptables -A INPUT -j DROP
+iptables -A INPUT -p tcp --dport 22 -m limit --limit 3/min --limit-burst 5 -j ACCEPT
+iptables -A INPUT -j LOG --log-prefix "Dropped: " --log-level 4
+iptables -A INPUT -m conntrack --ctstate INVALID -j DROP
+
+
+#Save the rules:
+
+sudo apt install iptables-persistent
+sudo netfilter-persistent save
+sudo netfilter-persistent reload
+
+
+#Avoid unnecessary rules: Keep the ruleset as simple as possible by avoiding redundant or unnecessary rules. Each rule adds overhead, so only add rules that are necessary for your use case.
+
+#Use -m conntrack for connection tracking: Instead of writing multiple rules for related connections, use -m conntrack to optimize for connection tracking. This avoids having multiple rules for the same connection.
+
+iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+
+# Use iptables sets: iptables allows you to define a set of IP addresses, ports, etc., and then refer to them in rules. This can be useful for managing large groups of IPs and reducing the number of rules.
+
+
+ipset create myset hash:ip
+ipset add myset 192.168.1.1
+iptables -A INPUT -m set --match-set myset src -j ACCEPT
+
+#Use iptables chains effectively: Avoid excessive use of custom chains. While custom chains can be used to organize rules, they can sometimes add overhead. Use them judiciously.
+
+#Rule ordering: Place more commonly used rules at the top of the rule set to minimize processing time for matching packets.
+
+
+### iptables-save
+
+iptables-save >/etc/iptables/rules.v4
+
+sysctl -w net.netfilter.nf_conntrack_max=262144
+sysctl -w net.ipv4.tcp_fin_timeout=30
+sysctl -w net.core.rmem_max=16777216
+sysctl -w net.core.wmem_max=16777216
+
+
+
+## psad
+
+sudp apt install psad -y
+
+sudo psad --sig-update
+sudo systemctl restart psad
+
+sudo sed -i '/^ENABLE_AUTO_IDS/c\ENABLE_AUTO_IDS Y;' /etc/psad/psad.conf
+sudo sed -i '/^AUTO_IDS_TCP_PORTS/c\AUTO_IDS_TCP_PORTS any;' /etc/psad/psad.conf
+sudo sed -i '/^AUTO_IDS_UDP_PORTS/c\AUTO_IDS_UDP_PORTS any;' /etc/psad/psad.conf
+
+
+
+ipset create blacklist hash:ip
+ipset add blacklist 192.168.1.1
+ipset add blacklist 192.168.1.2
+iptables -A INPUT -m set --match-set blacklist src -j DROP
+
+
+
+## Fail2ban
+
+sudo apt install fail2ban -y
+cd /etc/fail2ban/
+sudo cp jail.conf jail.local
+
+
+sudo sed -i '/^ignoreip/c\ignoreip = 127.0.0.1/8 ::1 123.123.123.123 192.168.1.0/24' /etc/fail2ban/jail.local
+
+sudo sed -i '/^bantime/c\bantime  = 1d' /etc/fail2ban/jail.local
+sudo sed -i '/^findtime/c\findtime  = 10m' /etc/fail2ban/jail.local
+sudo sed -i '/^maxretry/c\maxretry = 5' /etc/fail2ban/jail.local
+sudo sed -i '/^action/c\action = %(action_mw)s' /etc/fail2ban/jail.local
+
+
+sudo sed -i '/^\[proftpd\]/!a [proftpd]\nenabled  = true\nport     = ftp,ftp-data,ftps,ftps-data\nlogpath  = %(proftpd_log)s\nbackend  = %(proftpd_backend)s' /etc/fail2ban/jail.local
+
+
+sudo sed -i '/^\[sshd\]/!a [sshd]\nenabled   = true\nmaxretry  = 3\nfindtime  = 1d\nbantime   = 4w\nignoreip  = 127.0.0.1/8 23.34.45.56' /etc/fail2ban/jail.local
+
+
+
+
+
+## zeek
+
+# https://github.com/zeek/bro-scripts
+# https://github.com/michalpurzynski/zeek-scripts
+
+
+# Install Zeek dependencies and the Zeek package
+sudo apt update -y
+sudo apt install curl gnupg2 wget git -y
+
+# Add Zeek repository key and repository for Ubuntu 22.04
+curl -fsSL https://download.opensuse.org/repositories/security:zeek/xUbuntu_22.04/Release.key | gpg --dearmor | tee /etc/apt/trusted.gpg.d/security_zeek.gpg
+echo 'deb http://download.opensuse.org/repositories/security:/zeek/xUbuntu_22.04/ /' | tee /etc/apt/sources.list.d/security:zeek.list
+
+# Update apt package list and install Zeek
+sudo apt update -y
+sudo apt install zeek -y
+
+# Add Zeek to PATH
+echo "export PATH=\$PATH:/opt/zeek/bin" >> ~/.bashrc
+source ~/.bashrc
+
+# Verify the installation of Zeek
+zeek --version
+
+# Clone Zeek scripts repositories
+git clone https://github.com/zeek/bro-scripts /opt/zeek/bro-scripts
+git clone https://github.com/michalpurzynski/zeek-scripts /opt/zeek/zeek-scripts
+
+# Add scripts to the Zeek script path
+echo "export ZEEK_SCRIPT_PATH=\$ZEEK_SCRIPT_PATH:/opt/zeek/bro-scripts:/opt/zeek/zeek-scripts" >> ~/.bashrc
+source ~/.bashrc
+
+# Modify Zeek's local.zeek file to load custom scripts
+echo '@load /opt/zeek/bro-scripts/*' >> /opt/zeek/share/zeek/site/local.zeek
+echo '@load /opt/zeek/zeek-scripts/*' >> /opt/zeek/share/zeek/site/local.zeek
+
+# Restart Zeek to apply changes
+sudo zeekctl restart
+
+echo "Zeek installation and configuration with custom scripts is complete."
+
+
+
+
+
+
+## snort
+
+#!/bin/bash
+
+# Update and install Snort
+sudo apt update -y
+sudo apt install snort -y
+
+# Set the interface for Snort to use (change eth0 to your network interface)
+INTERFACE="eth0"
+
+# Test Snort installation
+sudo snort -c /etc/snort/snort.conf -i $INTERFACE
+
+# Enable custom rules in Snort's configuration file
+echo "Enabling community rules in snort.conf..."
+
+# Backup the snort.conf before modifying it
+sudo cp /etc/snort/snort.conf /etc/snort/snort.conf.backup
+
+# Add the include directive for community rules to snort.conf
+sudo sed -i "/# include \$RULE_PATH/community.rules/ a\include \$RULE_PATH/community.rules" /etc/snort/snort.conf
+
+# Download community rules
+echo "Downloading Snort community rules..."
+
+wget https://www.snort.org/downloads/community/community-rules.tar.gz -P /tmp
+
+# Extract the community rules to Snort's rules directory
+sudo tar -xvzf /tmp/community-rules.tar.gz -C /etc/snort/rules/
+
+# Test the Snort configuration to ensure rules are loaded correctly
+echo "Testing Snort configuration..."
+
+sudo snort -c /etc/snort/snort.conf -T
+
+# Create a custom Snort rule to detect executable files over HTTP
+echo "Creating custom Snort rule to detect executable file transfer over HTTP..."
+
+CUSTOM_RULE="alert tcp any any -> any 80 (msg:\"Executable file transfer\"; flow:to_client,established; file_data; content:\"MZ\"; classtype:trojan-activity; sid:1000001;)"
+
+# Add custom rule to community.rules file (or create a new custom rule file)
+echo "$CUSTOM_RULE" | sudo tee -a /etc/snort/rules/community.rules
+
+# Restart Snort to apply changes (optional, or use snort -D to run Snort in daemon mode)
+echo "Restarting Snort service to apply configuration..."
+
+sudo systemctl restart snort
+
+echo "Snort installation and configuration complete."
+
+
+
+
+## maltrail
+
+git clone https://github.com/stamparm/maltrail.git
+
+sudo apt-get install git python3 python3-dev python3-pip python-is-python3 libpcap-dev build-essential procps schedtool
+sudo pip3 install pcapy-ng
+git clone --depth 1 https://github.com/stamparm/maltrail.git
+cd maltrail
+sudo python3 sensor.py
+
+
+
+
+
+
+## clamav
+
+sudo apt update -y
+sudo apt install clamav -y
+
+
+sudo systemctl stop clam
+
+# Update ClamAV's virus database
+
+# Create a cron job to run the ClamAV scan daily at 2 AM
+echo "Setting up the daily ClamAV scan cron job..."
+
+# Add the cron job to root's crontab (as ClamAV often requires root privileges for scanning)
+(crontab -l 2>/dev/null; echo "0 2 * * * /usr/bin/clamscan --remove --recursive --infected / --exclude-dir=\"^/sys\" --exclude-dir=\"^/proc\" --log=/var/log/clamav-scan.log") | sudo crontab -
+
+# Verify the cron job has been added
+echo "Cron job for ClamAV daily scan has been set up."
+
+# Optionally, start the ClamAV service (if necessary)
+sudo systemctl enable clamav-freshclam
+sudo systemctl start clamav-freshclam
+
+# Confirm ClamAV is installed and working
+clamd --version
+
+
+
+
+## maldet
+
+
+
+# Install required dependencies for downloading and installing Maldet
+sudo apt update -y
+sudo apt install wget tar -y
+
+# Download and extract Maldet (Linux Malware Detect)
+cd /tmp
+wget http://www.rfxn.com/downloads/maldetect-current.tar.gz
+tar xfz maldetect-current.tar.gz
+cd maldetect-1.6.*
+
+# Install Maldet
+sudo ./install.sh
+
+# Go back to the home directory
+cd
+
+# Enable email notifications and other configurations by modifying the maldet.conf file
+echo "Configuring Maldet settings..."
+
+# Backup maldet.conf before modifying it
+sudo cp /usr/local/maldetect/conf.maldet /usr/local/maldetect/conf.maldet.backup
+
+# Modify the configuration file
+sudo sed -i 's/^email_alert="0"/email_alert="1"/' /usr/local/maldetect/conf.maldet
+sudo sed -i 's/^email_addr=""/email_addr="you@domain.com"/' /usr/local/maldetect/conf.maldet
+sudo sed -i 's/^autoupdate_signatures="0"/autoupdate_signatures="1"/' /usr/local/maldetect/conf.maldet
+sudo sed -i 's/^autoupdate_version="0"/autoupdate_version="1"/' /usr/local/maldetect/conf.maldet
+sudo sed -i 's/^cron_daily_scan="0"/cron_daily_scan="1"/' /usr/local/maldetect/conf.maldet
+sudo sed -i 's/^scan_user_access="0"/scan_user_access="1"/' /usr/local/maldetect/conf.maldet
+sudo sed -i 's/^quarantine_hits="0"/quarantine_hits="1"/' /usr/local/maldetect/conf.maldet
+sudo sed -i 's/^quarantine_clean="0"/quarantine_clean="0"/' /usr/local/maldetect/conf.maldet
+sudo sed -i 's/^quarantine_suspend_user="0"/quarantine_suspend_user="1"/' /usr/local/maldetect/conf.maldet
+sudo sed -i 's/^quarantine_suspend_user_minuid="1000"/quarantine_suspend_user_minuid="500"/' /usr/local/maldetect/conf.maldet
+sudo sed -i 's/^scan_clamscan="0"/scan_clamscan="1"/' /usr/local/maldetect/conf.maldet
+sudo sed -i 's/^scan_ignore_root="1"/scan_ignore_root="0"/' /usr/local/maldetect/conf.maldet
+
+# Enable daily scanning by adding it to the cron jobs
+echo "Setting up daily scan cron job..."
+echo "0 2 * * * /usr/local/maldetect/maldet --scan-all / --quiet --log-file=/var/log/maldet-scan.log" | sudo tee -a /etc/crontab
+
+# Confirm the installation and configuration
+echo "Maldet installation and configuration complete. Verifying the configuration..."
+
+# Check the configuration file for the necessary settings
+cat /usr/local/maldetect/conf.maldet | grep -E "email_alert|email_addr|autoupdate_signatures|autoupdate_version|cron_daily_scan|scan_user_access|quarantine_hits|quarantine_clean|quarantine_suspend_user|quarantine_suspend_user_minuid|scan_clamscan|scan_ignore_root"
+
+# Optionally, start Maldet (if necessary)
+echo "Maldet installed and configured. You can now manually run a scan or wait for the scheduled daily scan."
+
+
+
+sudo /usr/local/sbin/maldet --mkpubpaths
+
+
+## rkhunter
+
+
+# Update the package list and install rkhunter
+sudo apt update -y
+sudo apt install rkhunter -y
+
+# Modify /etc/rkhunter.conf for the required settings
+
+echo "Configuring rkhunter settings..."
+
+# Backup the rkhunter.conf file before editing
+sudo cp /etc/rkhunter.conf /etc/rkhunter.conf.backup
+
+# Edit the rkhunter configuration file
+sudo sed -i 's/^ALLOW_SSH_ROOT_USER=.*/ALLOW_SSH_ROOT_USER=0/' /etc/rkhunter.conf
+sudo sed -i 's/^SCRIPTWHITELIST=.*/SCRIPTWHITELIST=\/usr\/bin\/prelink/' /etc/rkhunter.conf
+
+# Set up daily scan via cronjob
+echo "Setting up daily scan cron job..."
+
+# Add cron job to run rkhunter daily at 3 AM
+echo "0 3 * * * /usr/bin/rkhunter --check --cronjob --report-warnings-only" | sudo tee -a /etc/crontab
+
+# Verify the cron job is added
+echo "Cron job for daily rkhunter scan has been set up."
+
+# Optionally, manually run an initial scan to ensure rkhunter is working
+echo "Running initial rkhunter scan..."
+sudo rkhunter --check
+
+# Confirm rkhunter installation and configuration
+echo "rkhunter installation and configuration complete. You can now check logs in /var/log/rkhunter.log."
+
+
+
+## chkrootkit
+
+```
+sudo apt install chkrootkit -y
+```
+
+
+## netdata
+
+# Update the package list and upgrade existing packages
+echo "Updating package list and upgrading packages..."
+sudo apt update -y
+sudo apt upgrade -y
+
+# Install Netdata
+echo "Installing Netdata..."
+sudo apt install netdata -y
+
+# Configure Netdata to bind to a public IP (replace 0.0.0.0 with actual IP if needed)
+echo "Configuring Netdata to bind to a public IP..."
+
+# Get the server's public IP address
+PUBLIC_IP=$(hostname -I | awk '{print $1}')
+
+# Backup the original Netdata configuration file
+sudo cp /etc/netdata/netdata.conf /etc/netdata/netdata.conf.backup
+
+# Modify the netdata configuration file to bind to the public IP address
+sudo sed -i "s/^bind socket to IP = 127.0.0.1$/bind socket to IP = $PUBLIC_IP/" /etc/netdata/netdata.conf
+
+# Restart the Netdata service to apply the changes
+echo "Restarting Netdata service..."
+sudo systemctl restart netdata
+
+# Confirm the status of the Netdata service
+echo "Netdata installation and configuration complete. Verifying service status..."
+sudo systemctl status netdata | grep "active (running)"
+
+# Allow port 19999 through the firewall using iptables
+echo "Configuring iptables to allow traffic on port 19999..."
+
+# Add iptables rule to allow traffic on port 19999
+sudo iptables -A INPUT -p tcp --dport 19999 -j ACCEPT
+
+# Save the iptables rule to persist on reboot (depending on your system's iptables-persistent setup)
+echo "Saving iptables rules to persist on reboot..."
+sudo sh -c 'iptables-save > /etc/iptables/rules.v4'
+
+# Check the iptables status to confirm the rule is applied
+echo "Checking iptables status..."
+sudo iptables -L -n
+
+# Display Netdata Dashboard URL
+echo "Netdata is now installed and configured."
+echo "You can access the Netdata dashboard by opening the following URL in your browser:"
+echo "http://$PUBLIC_IP:19999"
+
+
+### system Hardening
+
+
+# Secure SSH by disabling root login
+echo "Disabling root login for SSH..."
+sudo sed -i 's/^#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config
+sudo systemctl restart sshd
+
+# Confirm root login is disabled
+echo "Checking SSH configuration..."
+grep "^PermitRootLogin" /etc/ssh/sshd_config
+
+# Enable Automatic Updates
+echo "Installing unattended-upgrades for automatic updates..."
+sudo apt install unattended-upgrades -y
+
+# Configure automatic upgrades
+echo "Configuring unattended-upgrades..."
+sudo dpkg-reconfigure unattended-upgrades
+
+# Ensure unattended-upgrades service is enabled and running
+echo "Ensuring unattended-upgrades service is active..."
+sudo systemctl enable unattended-upgrades
+sudo systemctl start unattended-upgrades
+
+# Confirm the status of the unattended-upgrades service
+echo "Checking unattended-upgrades status..."
+sudo systemctl status unattended-upgrades | grep "active (running)"
+
+echo "SSH root login is disabled and automatic updates have been enabled."
+
