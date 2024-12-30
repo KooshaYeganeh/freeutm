@@ -3,7 +3,7 @@
 
 
 
-Step 1: Choose a Lightweight Linux Distribution
+### Choose a Lightweight Linux Distribution
 
 Recommended OS: Debian or Ubuntu Server (minimal installation).
 
@@ -18,8 +18,9 @@ Both are stable and have extensive community support.
 
 
 
+### Configure Firewall
 
-## iptables
+#### iptables
 
 
 
@@ -67,7 +68,7 @@ Use iptables chains effectively: Avoid excessive use of custom chains. While cus
 Rule ordering: Place more commonly used rules at the top of the rule set to minimize processing time for matching packets.
 
 
-### iptables-save
+#### iptables-save
 
 ```
 iptables-save >/etc/iptables/rules.v4
@@ -87,7 +88,7 @@ sysctl -w net.core.wmem_max=16777216
 
 
 
-## psad
+### configure psad
 
 ```
 sudp apt install psad
@@ -111,7 +112,7 @@ AUTO_IDS_UDP_PORTS any;
 ```
 
 
-## ipset
+### Configure ipset
 
 ```
 ipset create blacklist hash:ip
@@ -122,7 +123,7 @@ iptables -A INPUT -m set --match-set blacklist src -j DROP
 ```
 
 
-## Fail2ban
+### Configure Fail2ban
 
 ```
 sudo apt install fail2ban -y
@@ -142,14 +143,14 @@ sudo vi /etc/fail2ban/jail.local
 ignoreip = 127.0.0.1/8 ::1 123.123.123.123 192.168.1.0/24
 ```
 
-### Whitelist IP Addresses
+#### Whitelist IP Addresses
 
 ```
 ignoreip = 127.0.0.1/8 ::1 123.123.123.123 192.168.1.0/24
 ```
 
 
-### Ban Settings
+#### Ban Settings
 
 ```
 bantime  = 1d
@@ -159,7 +160,7 @@ action = %(action_mw)s
 ```
 
 
-### Fail2ban Jails
+#### Fail2ban Jails
 
 ```
 [proftpd]
@@ -182,7 +183,7 @@ ignoreip  = 127.0.0.1/8 23.34.45.56
 
 
 
-## zeek
+### Configure Zeek
 
 ```
 apt install curl gnupg2 wget -y
@@ -202,7 +203,7 @@ url : https://www.howtoforge.com/how-to-install-zeek-network-security-monitoring
 ![bro-scripts2](https://github.com/michalpurzynski/zeek-scripts)
 
 
-## snort
+### Configure Snort
 
 ```
 sudo apt install snort -y
@@ -240,7 +241,7 @@ Snort rule to trigger when an executable file is transferred over HTTP:
 alert tcp any any -> any 80 (msg:"Executable file transfer"; flow:to_client,established; file_data; content:"MZ"; classtype:trojan-activity; sid:1000001;)
 ```
 
-## maltrail
+### Configure Maltrail
 
 ```
 git clone https://github.com/stamparm/maltrail.git
@@ -256,7 +257,7 @@ sudo python3 sensor.py
 
 
 
-## clamav
+### Configure Clamav
 
 ```
 sudo apt install clamav -y
@@ -266,7 +267,7 @@ sudo apt install clamav -y
 0 2 * * * /usr/bin/clamscan --remove --recursive --infected / --exclude-dir="^/sys" --exclude-dir="^/proc" --log=/var/log/clamav-scan.log
 ```
 
-## maldet
+### Configure Maldet
 
 ```
 cd /tmp && wget http://www.rfxn.com/downloads/maldetect-current.tar.gz && tar xfz maldetect-current.tar.gz && cd maldetect-1.6.* && sudo ./install.sh && cd
@@ -322,7 +323,7 @@ sudo /usr/local/sbin/maldet --mkpubpaths
 ```
 
 
-## rkhunter
+### Configire Rkhunter
 
 ```
 sudo apt install rkhunter -y
@@ -341,7 +342,7 @@ SCRIPTWHITELIST=/usr/bin/prelink
 echo "0 3 * * * /usr/bin/rkhunter --check --cronjob --report-warnings-only" | sudo tee -a /etc/crontab
 ```
 
-## chkrootkit
+### Configure chkrootkit
 
 ```
 sudo apt install chkrootkit -y
