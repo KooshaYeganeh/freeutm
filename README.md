@@ -355,19 +355,89 @@ https://wiki.crowncloud.net/?how_to_Install_netdata_monitoring_tool_ubuntu_22_04
 
 ### system Hardening
 
-Secure SSH
+**Secure SSH**
 
-Disable root login:
+> Before making any changes, always back up the SSH configuration files:
+
+```
+sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup
+```
+
+> Disable root login:
 
 ```
 sudo vi /etc/ssh/sshd_config
 ```
 
-Set:
-
 ```
 PermitRootLogin no
 ```
+
+> Use SSH Protocol 2 Only
+
+```
+Protocol 2
+```
+
+> Use Strong Authentication Methods
+
+```
+PasswordAuthentication no
+```
+
+> Disable Empty Passwords
+
+```
+PermitEmptyPasswords no
+```
+
+> Limit SSH Access to Specific Users or Groups
+
+```
+AllowUsers user1 user2
+```
+
+> Change the Default SSH Port
+
+```
+Port 2222
+```
+
+> add ssh Service to Fail2Ban
+
+```
+sudo vi /etc/fail2ban/jail.local
+```
+
+```
+[sshd]
+enabled = true
+port = 2222  # Change this if you modified your SSH port
+logpath = /var/log/auth.log
+maxretry = 3
+bantime = 3600  # 1 hour
+findtime = 600  # 10 minutes
+```
+
+
+> Enable SSH Banner
+
+```
+sudo vi /etc/issue.net
+```
+Add a message (for example):
+
+```
+Warning: Unauthorized access is prohibited.
+```
+
+> Enable the banner in /etc/ssh/sshd_config
+
+```
+Banner /etc/issue.net
+```
+
+---
 
 Enable Automatic Updates
 
@@ -377,3 +447,6 @@ Install unattended-upgrades:
 sudo apt install unattended-upgrades -y
 sudo dpkg-reconfigure unattended-upgrades
 ```
+
+
+
