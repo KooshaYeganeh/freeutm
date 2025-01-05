@@ -16,11 +16,31 @@ Both are stable and have extensive community support.
 ![Ubuntu Server](https://ubuntucommunity.s3.us-east-2.amazonaws.com/original/2X/1/17ee449b2bd7c530d2f996215407fca5b722dcb2.png)
 
 
-**--configure --fw : configure firewall tools**                
-**--configure --kernel : configure Kernel Parameters**         
-**--configure --service-manager : configure Fail2Ban**         
-**--configure --ids/ips : configure Zeek and snort and maltrai    l**                                                            
-**--configure --av : configure clamAV and Maldet and RKhunter     and chkrootkit and Yara**                                      
-**--configure --monitoring : configure Netdata**               
-**--configure --hardening : Hardening system** 
+### HELP
+
+```
+./freeutm --configure --fw # configure firewall tools
+```                
+
+```
+./freeutm --configure --kernel # configure Kernel Parameters
+```         
+
+```
+./freeutm --configure --service-manager # configure Fail2Ban```         
+```
+```
+./freeutm --configure --ids/ips # configure Zeek and snort and maltrail```                                                       
+```
+
+```
+./freeutm --configure --av # configure clamAV and Maldet and RKhunter and chkrootkit and Yara
+```                                      
+
+```
+./freeutm --configure --monitoring # configure Netdata
+```               
+```
+./freeutm --configure --hardening # Hardening system
+``` 
 
