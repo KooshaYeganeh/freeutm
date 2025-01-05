@@ -220,56 +220,76 @@ echo "Zeek installation and configuration with custom scripts is complete."
 
 ## snort
 
-#!/bin/bash
+sudo apt-cache policy snort
+sudo apt update
+sudo apt upgrade -y
+sudo apt install build-essential libpcap-dev libpcre3-dev \
+libnet1-dev zlib1g-dev luajit hwloc libdnet-dev \
+libdumbnet-dev bison flex liblzma-dev openssl libssl-dev \
+pkg-config libhwloc-dev cmake cpputest libsqlite3-dev uuid-dev \
+libcmocka-dev libnetfilter-queue-dev libmnl-dev autotools-dev \
+libluajit-5.1-dev libunwind-dev libfl-dev -y
 
-# Update and install Snort
-sudo apt update -y
-sudo apt install snort -y
+cd /tmp 
+mkdir snort-source-files && cd snort-source-files
+git clone https://github.com/snort3/libdaq.git
+cd libdaq
+./bootstrap
+./configure
+make
+sudo make install
 
-# Set the interface for Snort to use (change eth0 to your network interface)
-INTERFACE="eth0"
+cd ../
+wget https://github.com/gperftools/gperftools/releases/download/gperftools-2.9.1/gperftools-2.9.1.tar.gz
+tar xzf gperftools-2.9.1.tar.gz
+cd gperftools-2.9.1/
+./configure
+make
+sudo make install
 
-# Test Snort installation
-sudo snort -c /etc/snort/snort.conf -i $INTERFACE
+cd ../
+wget https://github.com/snort3/snort3/archive/refs/tags/3.1.28.0.tar.gz
 
-# Enable custom rules in Snort's configuration file
-echo "Enabling community rules in snort.conf..."
+tar xzf 3.1.28.0.tar.gz
+cd snort3-3.1.28.0
+./configure_cmake.sh --prefix=/usr/local --enable-tcmalloc
+cd build
+make
+sudo make install
+sudo ldconfig
 
-# Backup the snort.conf before modifying it
-sudo cp /etc/snort/snort.conf /etc/snort/snort.conf.backup
+ip link set dev enp0s8 promisc on
 
-# Add the include directive for community rules to snort.conf
-sudo sed -i "/# include \$RULE_PATH/community.rules/ a\include \$RULE_PATH/community.rules" /etc/snort/snort.conf
+network_interface=`ifconfig -a | grep "enp" | cut -d":" -f1`
 
-# Download community rules
-echo "Downloading Snort community rules..."
+sudo apt install ethtool -y
+ethtool -k $network_interface | grep receive-offload
+ethtool -K $network_interface gro off lro off
 
-wget https://www.snort.org/downloads/community/community-rules.tar.gz -P /tmp
+echo """  
+[Unit]
+Description=Set Snort 3 NIC in promiscuous mode and Disable GRO, LRO on boot
+After=network.target
 
-# Extract the community rules to Snort's rules directory
-sudo tar -xvzf /tmp/community-rules.tar.gz -C /etc/snort/rules/
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ip link set dev enp0s8 promisc on
+ExecStartPost=/usr/sbin/ethtool -K enp0s8 gro off lro off
+TimeoutStartSec=0
+RemainAfterExit=yes
 
-# Test the Snort configuration to ensure rules are loaded correctly
-echo "Testing Snort configuration..."
+[Install]
+WantedBy=default.target""" | sudo tee /etc/systemd/system/snort3.service > /dev/null
 
-sudo snort -c /etc/snort/snort.conf -T
-
-# Create a custom Snort rule to detect executable files over HTTP
-echo "Creating custom Snort rule to detect executable file transfer over HTTP..."
-
-CUSTOM_RULE="alert tcp any any -> any 80 (msg:\"Executable file transfer\"; flow:to_client,established; file_data; content:\"MZ\"; classtype:trojan-activity; sid:1000001;)"
-
-# Add custom rule to community.rules file (or create a new custom rule file)
-echo "$CUSTOM_RULE" | sudo tee -a /etc/snort/rules/community.rules
-
-# Restart Snort to apply changes (optional, or use snort -D to run Snort in daemon mode)
-echo "Restarting Snort service to apply configuration..."
-
-sudo systemctl restart snort
-
-echo "Snort installation and configuration complete."
+sudo systemctl daemon-reload
+sudo systemctl enable --now snort3.service
 
 
+sudo mkdir /usr/local/etc/rules
+cd /tmp
+wget https://www.snort.org/downloads/community/snort3-community-rules.tar.gz
+tar xvf snort3-community-rules.tar.gz
+sudo cp -rvf snort3-community-rules /usr/local/etc/rules
 
 
 ## maltrail
