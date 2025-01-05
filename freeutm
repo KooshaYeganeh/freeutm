@@ -1,9 +1,30 @@
 #!/bin/bash
 
+# We were, are, and will be indebted to Linus Torvalds, Richard Stallman, and ken thompson and dennis ritchie and Ian Murdock and Eric Raymond and "Jadi" and others for the open source system and the development of the Linux operating system.
 
 
 
 ## iptables
+
+
+
+#Save the rules:
+
+configure_fw(){
+
+sudo apt install iptables-persistent -y
+sudo netfilter-persistent save
+sudo netfilter-persistent reload
+
+sudo apt install ipset -y
+sudo apt install psad -y
+sudo psad --sig-update
+sudo systemctl restart psad
+
+sudo sed -i '/^ENABLE_AUTO_IDS/c\ENABLE_AUTO_IDS Y;' /etc/psad/psad.conf
+sudo sed -i '/^AUTO_IDS_TCP_PORTS/c\AUTO_IDS_TCP_PORTS any;' /etc/psad/psad.conf
+sudo sed -i '/^AUTO_IDS_UDP_PORTS/c\AUTO_IDS_UDP_PORTS any;' /etc/psad/psad.conf
+
 
 
 
@@ -14,12 +35,6 @@ iptables -A INPUT -p tcp --dport 22 -m limit --limit 3/min --limit-burst 5 -j AC
 iptables -A INPUT -j LOG --log-prefix "Dropped: " --log-level 4
 iptables -A INPUT -m conntrack --ctstate INVALID -j DROP
 
-
-#Save the rules:
-
-sudo apt install iptables-persistent
-sudo netfilter-persistent save
-sudo netfilter-persistent reload
 
 
 #Avoid unnecessary rules: Keep the ruleset as simple as possible by avoiding redundant or unnecessary rules. Each rule adds overhead, so only add rules that are necessary for your use case.
@@ -44,34 +59,92 @@ iptables -A INPUT -m set --match-set myset src -j ACCEPT
 
 iptables-save >/etc/iptables/rules.v4
 
+
+}
+
+
+
+configure_network_kernel(){
+
 sysctl -w net.netfilter.nf_conntrack_max=262144
 sysctl -w net.ipv4.tcp_fin_timeout=30
 sysctl -w net.core.rmem_max=16777216
 sysctl -w net.core.wmem_max=16777216
+sysctl -w net.ipv4.tcp_syncookies=1 # Enable Syn Cookies Protection
+sysctl -w fs.file-max=1000000 # Increase the Maximum Number of Connections
+ulimit -n 65535
+
+#  Disable Source Routed Packets 
+sysctl -w net.ipv4.conf.all.accept_source_route=0
+sysctl -w net.ipv4.conf.default.accept_source_route=0
+
+
+# Disable IP Spoofing Protection
+
+sysctl -w net.ipv4.conf.all.rp_filter=1
+sysctl -w net.ipv4.conf.default.rp_filter=1
+
+# Disable ICMP Redirect Acceptance
+
+sysctl -w net.ipv4.conf.all.accept_redirects=0
+sysctl -w net.ipv4.conf.default.accept_redirects=0
+
+# Log Suspicious Packets (for Security Auditing)
+
+# Log dropped packets
+sysctl -w net.ipv4.conf.all.log_martians=1
+sysctl -w net.ipv4.conf.default.log_martians=1
+
+# Tune TCP Buffer Sizes
+
+sysctl -w net.ipv4.tcp_rmem="4096 87380 16777216"
+sysctl -w net.ipv4.tcp_wmem="4096 16384 16777216"
+
+# Enable TCP Fast Open 
+
+sysctl -w net.ipv4.tcp_fastopen=3
+
+# Increase the Maximum Number of TCP Connections
+
+sysctl -w net.ipv4.tcp_max_syn_backlog=4096
+
+##  Performance Tuning for Multi-core Processors
+#  Disable NUMA (if not using NUMA architecture)
+sysctl -w kernel.numa_balancing=0
+
+#  Tune Interrupts (IRQ) Affinity for Multi-core Systems
+echo 1 > /proc/irq/XX/smp_affinity  # Replace XX with the IRQ number for your network interface
+
+# Enable TCP/UDP Congestion Control Algorithm (CUBIC)
+
+sysctl -w net.ipv4.tcp_congestion_control=cubic
 
 
 
-## psad
+# Enable IP Forwarding
 
-sudp apt install psad -y
+sysctl -w net.ipv4.ip_forward=1
 
-sudo psad --sig-update
-sudo systemctl restart psad
+# Disable IPv6 (if not using IPv6)
 
-sudo sed -i '/^ENABLE_AUTO_IDS/c\ENABLE_AUTO_IDS Y;' /etc/psad/psad.conf
-sudo sed -i '/^AUTO_IDS_TCP_PORTS/c\AUTO_IDS_TCP_PORTS any;' /etc/psad/psad.conf
-sudo sed -i '/^AUTO_IDS_UDP_PORTS/c\AUTO_IDS_UDP_PORTS any;' /etc/psad/psad.conf
+sysctl -w net.ipv6.conf.all.disable_ipv6=1
+sysctl -w net.ipv6.conf.default.disable_ipv6=1
+
+# Increase the Maximum Number of Network Connections
+
+sysctl -w net.core.somaxconn=1024
+
+
+}
 
 
 
-ipset create blacklist hash:ip
-ipset add blacklist 192.168.1.1
-ipset add blacklist 192.168.1.2
-iptables -A INPUT -m set --match-set blacklist src -j DROP
 
 
 
 ## Fail2ban
+
+configure_service_manager(){
 
 sudo apt install fail2ban -y
 cd /etc/fail2ban/
@@ -91,9 +164,12 @@ sudo sed -i '/^\[proftpd\]/!a [proftpd]\nenabled  = true\nport     = ftp,ftp-dat
 
 sudo sed -i '/^\[sshd\]/!a [sshd]\nenabled   = true\nmaxretry  = 3\nfindtime  = 1d\nbantime   = 4w\nignoreip  = 127.0.0.1/8 23.34.45.56' /etc/fail2ban/jail.local
 
+}
 
 
 
+
+configure_ids(){
 
 ## zeek
 
@@ -206,10 +282,13 @@ git clone --depth 1 https://github.com/stamparm/maltrail.git
 cd maltrail
 sudo python3 sensor.py
 
+}
 
 
 
 
+
+configure_av(){
 
 ## clamav
 
@@ -336,10 +415,18 @@ echo "rkhunter installation and configuration complete. You can now check logs i
 
 ## chkrootkit
 
-```
 sudo apt install chkrootkit -y
-```
 
+
+
+
+}
+
+
+
+
+
+configure_monitoring(){
 
 ## netdata
 
@@ -391,8 +478,15 @@ echo "Netdata is now installed and configured."
 echo "You can access the Netdata dashboard by opening the following URL in your browser:"
 echo "http://$PUBLIC_IP:19999"
 
+}
+
+
+
+system_hardening(){
+
 
 ### system Hardening
+
 
 
 # Secure SSH by disabling root login
@@ -422,4 +516,48 @@ echo "Checking unattended-upgrades status..."
 sudo systemctl status unattended-upgrades | grep "active (running)"
 
 echo "SSH root login is disabled and automatic updates have been enabled."
+}
+
+
+
+if [ "$1" == "--configure" ];then
+	if [ "$2" == "--fw" ];then
+		configure_fw
+	elif [ "$2" == "--kernel" ];then
+		configure_network_kernel
+	elif [ "$2" == "--service-manager" ];then
+		configure_service_manager
+	elif [ "$2" == "--ids/ips" ];then
+		configure_ids
+	elif [ "$2" == "--av" ];then
+		configure_av
+	elif [ "$2" == "--monitoring" ];then
+		configure_monitoring
+	elif [ "$2" == "--hardening" ];then
+		system_hardening
+	else
+		echo "switch Error"
+		echo "--------------- HELP ---------------"
+		echo "--fw : configure firewall tools"
+		echo "--kernel : configure Kernel Parameters"
+		echo "--service-manager : configure Fail2Ban"
+		echo "--ids/ips : configure Zeek and snort and maltrail"
+		echo "--av : configure clamAV and Maldet and RKhunter and chkrootkit and Yara"
+		echo "--monitoring : configure Netdata"
+		echo "--hardening : Hardening system"
+	fi
+elif [ "$1" == "--help" ];then
+	echo "--------------- HELP ---------------"
+	echo "--fw : configure firewall tools"
+	echo "--kernel : configure Kernel Parameters"
+	echo "--service-manager : configure Fail2Ban"
+	echo "--ids/ips : configure Zeek and snort and maltrail"
+	echo "--av : configure clamAV and Maldet and RKhunter and chkrootkit and Yara"
+	echo "--monitoring : configure Netdata"
+	echo "--hardening : Hardening system"
+
+else
+	echo "Error.Edit command"
+fi
+
 
