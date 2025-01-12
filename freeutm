@@ -568,13 +568,14 @@ if [ "$1" == "--configure" ];then
 	fi
 elif [ "$1" == "--help" ];then
 	echo "--------------- HELP ---------------"
-	echo "--fw : configure firewall tools"
-	echo "--kernel : configure Kernel Parameters"
-	echo "--service-manager : configure Fail2Ban"
-	echo "--ids/ips : configure Zeek and snort and maltrail"
-	echo "--av : configure clamAV and Maldet and RKhunter and chkrootkit and Yara"
-	echo "--monitoring : configure Netdata"
-	echo "--hardening : Hardening system"
+	echo "--configure"
+		echo -e "\t--fw : configure firewall tools"
+		echo -e "\t--kernel : configure Kernel Parameters"
+		echo -e "\t--service-manager : configure Fail2Ban"
+		echo -e "\t--ids/ips : configure Zeek and snort and maltrail"
+		echo -e "\t--av : configure clamAV and Maldet and RKhunter and chkrootkit and Yara"
+		echo -e "\t--monitoring : configure Netdata"
+		echo -e "\t--hardening : Hardening system"
 
 else
 	echo "Error.Edit command"
