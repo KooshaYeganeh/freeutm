@@ -444,6 +444,16 @@ sudo apt install chkrootkit -y
 
 
 
+update_av(){
+
+	sudo systemctl stop clamav-freshclam
+	sudo freshclam
+	sudo systemctl start clamav-freshclam
+	sudo /usr/local/sbin/maldet -u
+	sudo rkhunter –-update
+}
+
+
 
 
 configure_monitoring(){
@@ -540,6 +550,26 @@ echo "SSH root login is disabled and automatic updates have been enabled."
 
 
 
+help(){
+
+echo "--------------- HELP ---------------"
+echo "--configure"
+echo -e "\t--fw : configure firewall tools"
+echo -e "\t--kernel : configure Kernel Parameters"
+echo -e "\t--service-manager : configure Fail2Ban"
+echo -e "\t--ids/ips : configure Zeek and snort and maltrail"
+echo -e "\t--ids/ips --add-rule '<rule>' : You can Add your Custom Rule for Snort"
+echo -e "\t--av : configure clamAV and Maldet and RKhunter and chkrootkit and Yara"
+echo -e "\t--av --update : update clamAV and Maldet and RKhunter Database"
+echo -e "\t--monitoring : configure Netdata"
+echo -e "\t--hardening : Hardening system"
+
+
+
+
+}
+
+
 if [ "$1" == "--configure" ];then
 	if [ "$2" == "--fw" ];then
 		configure_fw
@@ -548,35 +578,30 @@ if [ "$1" == "--configure" ];then
 	elif [ "$2" == "--service-manager" ];then
 		configure_service_manager
 	elif [ "$2" == "--ids/ips" ];then
-		configure_ids
+		if [ "$3" == "--add-rule" ];then
+			rule="$4"
+			echo $4 | sudo tee -a /usr/local/etc/rules/local.rules
+			echo "rule Added to custom Rules [ OK ]"
+		else
+
+			configure_ids
+		fi
+
 	elif [ "$2" == "--av" ];then
-		configure_av
+		if [ "$3" == "--update" ];then
+			update_av
+		else
+			configure_av
+		fi
 	elif [ "$2" == "--monitoring" ];then
 		configure_monitoring
 	elif [ "$2" == "--hardening" ];then
 		system_hardening
 	else
-		echo "switch Error"
-		echo "--------------- HELP ---------------"
-		echo "--fw : configure firewall tools"
-		echo "--kernel : configure Kernel Parameters"
-		echo "--service-manager : configure Fail2Ban"
-		echo "--ids/ips : configure Zeek and snort and maltrail"
-		echo "--av : configure clamAV and Maldet and RKhunter and chkrootkit and Yara"
-		echo "--monitoring : configure Netdata"
-		echo "--hardening : Hardening system"
+		help
 	fi
 elif [ "$1" == "--help" ];then
-	echo "--------------- HELP ---------------"
-	echo "--configure"
-		echo -e "\t--fw : configure firewall tools"
-		echo -e "\t--kernel : configure Kernel Parameters"
-		echo -e "\t--service-manager : configure Fail2Ban"
-		echo -e "\t--ids/ips : configure Zeek and snort and maltrail"
-		echo -e "\t--av : configure clamAV and Maldet and RKhunter and chkrootkit and Yara"
-		echo -e "\t--monitoring : configure Netdata"
-		echo -e "\t--hardening : Hardening system"
-
+	help
 else
 	echo "Error.Edit command"
 fi
