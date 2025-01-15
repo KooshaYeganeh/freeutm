@@ -1,63 +1,68 @@
+# Create Your Custom UTM with Your Old Server
 
-## Create New Generation Firewalls with Old Servers
+## 1. Choose a Lightweight Linux Distribution
 
+**Recommended OS**:
+- **Debian** or **Ubuntu Server** (minimal installation)
+Both distributions are stable and widely supported by the community, making them ideal for setting up your UTM.
 
+---
 
-### Choose a Lightweight Linux Distribution
+## 2. Configuration Commands
 
-Recommended OS: Debian or Ubuntu Server (minimal installation).
-
-Both are stable and have extensive community support.
-
-#### Lubuntu
-
-![Lubuntu](https://fosspost.org/wp-content/uploads/2019/09/lubuntu-19-04-review-6.png)
-
-![Ubuntu Server](https://ubuntucommunity.s3.us-east-2.amazonaws.com/original/2X/1/17ee449b2bd7c530d2f996215407fca5b722dcb2.png)
-
-
-### HELP
-
-```
-freeutm --configure --firewall # configure firewall tools
-```                
-
-```
-freeutm --configure --kernel # configure Kernel Parameters
-```         
-
-```
-freeutm --configure --service-manager # configure Fail2Ban 
+### Firewall Configuration
+```bash
+freeutm --configure --firewall   # Configure firewall tools
 ```
 
-```
-freeutm --configure --ids/ips # configure Zeek and snort and maltrail
-```
-
-
-```
-freeutm --configure --ids/ips --add-rule '<rule>' # add New rule for local.rules
+### Kernel Parameters Configuration
+```bash
+freeutm --configure --kernel    # Configure kernel parameters
 ```
 
-
-```
-freeutm --configure --av # configure clamAV and Maldet and RKhunter and chkrootkit and Yara
-```                                      
-
-```
-freeutm --configure --av --update # Update Antivirus Database
+### Fail2Ban Configuration
+```bash
+freeutm --configure --service-manager   # Configure Fail2Ban
 ```
 
-```
-freeutm --configure --monitoring # configure Netdata
-```               
-
-```
-freeutm --configure --hardening # Hardening system
-``` 
-
-```
-freeutm --help
+### IDS/IPS Configuration (Zeek, Snort, Maltrail)
+```bash
+freeutm --configure --ids/ips   # Configure Zeek, Snort, and Maltrail
 ```
 
+### Adding Custom Rule to IDS/IPS
+```bash
+freeutm --configure --ids/ips --add-rule '<rule>'   # Add new rule to local.rules
+```
 
+### Antivirus Configuration (ClamAV, Maldet, RKhunter, chkrootkit, Yara)
+```bash
+freeutm --configure --av   # Configure ClamAV, Maldet, RKhunter, chkrootkit, and Yara
+```
+
+### Update Antivirus Database
+```bash
+freeutm --configure --av --update   # Update antivirus database
+```
+
+### Monitoring Configuration (Netdata)
+```bash
+freeutm --configure --monitoring   # Configure Netdata for system monitoring
+```
+
+### System Hardening
+```bash
+freeutm --configure --hardening   # Harden system security settings
+```
+
+---
+
+## 3. General Help
+If you need additional guidance or help with commands, use the following:
+```bash
+freeutm --help   # Display help information
+```
+
+---
+
+With these steps, you can set up a comprehensive UTM solution tailored to your server's needs. Each configuration command enhances your server’s security and monitoring capabilities.
