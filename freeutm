@@ -554,10 +554,10 @@ help(){
 
 echo "--------------- HELP ---------------"
 echo "--configure"
-echo -e "\t--fw : configure firewall tools"
+echo -e "\t--firewall : configure firewall tools"
 echo -e "\t--kernel : configure Kernel Parameters"
 echo -e "\t--service-manager : configure Fail2Ban"
-echo -e "\t--ids/ips : configure Zeek and snort and maltrail"
+echo -e "\t--ids/ips : configurec Zeek and snort and maltrail"
 echo -e "\t--ids/ips --add-rule '<rule>' : You can Add your Custom Rule for Snort"
 echo -e "\t--av : configure clamAV and Maldet and RKhunter and chkrootkit and Yara"
 echo -e "\t--av --update : update clamAV and Maldet and RKhunter Database"
@@ -571,7 +571,7 @@ echo -e "\t--hardening : Hardening system"
 
 
 if [ "$1" == "--configure" ];then
-	if [ "$2" == "--fw" ];then
+	if [ "$2" == "--firewall" ];then
 		configure_fw
 	elif [ "$2" == "--kernel" ];then
 		configure_network_kernel
