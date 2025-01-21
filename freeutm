@@ -4,6 +4,231 @@
 
 
 
+configure_basic(){
+
+sudo apt install mailutils -y
+sudo apt install git -y
+sudo apt install wondershaper -y
+
+# 1. iptables Email Alerts
+echo "* * * * * root tail -n 20 /var/log/syslog | grep 'Dropped:' | mail -s 'Critical iptables Event' youremail@example.com" | sudo tee -a /etc/crontab
+
+# 2. Fail2Ban Email Alerts (already configured in jail.local)
+
+# 3. Malware Detection Email Alerts (ClamAV, Maldet, Rkhunter)
+
+# Maldet
+sudo sed -i 's/^email_alert="0"/email_alert="1"/' /usr/local/maldetect/conf.maldet
+sudo sed -i 's/^email_addr=""/email_addr="youremail@example.com"/' /usr/local/maldetect/conf.maldet
+
+# Rkhunter
+sudo sed -i 's/^MAIL_ON_WARNINGS=.*/MAIL_ON_WARNINGS="yes"/' /etc/rkhunter.conf
+sudo sed -i 's/^MAIL_CMD=.*/MAIL_CMD="mail -s \"rkhunter alert\" youremail@example.com"/' /etc/rkhunter.conf
+
+# Ensure Cron Jobs are in place for Maldet and Rkhunter for daily scans and alert generation
+echo "0 2 * * * /usr/local/maldetect/maldet --scan-all / --quiet --log-file=/var/log/maldet-scan.log" | sudo tee -a /etc/crontab
+echo "0 3 * * * /usr/bin/rkhunter --check --cronjob --report-warnings-only" | sudo tee -a /etc/crontab
+
+
+
+}
+
+
+
+
+# Resource : https://github.com/Bert-JanP/Open-Source-Threat-Intel-Feeds?tab=readme-ov-file
+
+
+fetch_threat_feed() {
+    # List of threat feed URLs (replace with actual feed URLs)
+    FEED_URLS=(
+				"https://threatfox.abuse.ch/downloads/hostfile/"
+				"https://sslbl.abuse.ch/blacklist/sslipblacklist.csv"
+				"https://sslbl.abuse.ch/blacklist/sslipblacklist.txt"
+				"https://sslbl.abuse.ch/blacklist/sslipblacklist_aggressive.csv"
+				"https://sslbl.abuse.ch/blacklist/sslipblacklist_aggressive.txt"
+				"https://lists.blocklist.de/lists/all.txt"
+				"https://lists.blocklist.de/lists/ssh.txt"
+				"https://lists.blocklist.de/lists/mail.txt"
+				"https://lists.blocklist.de/lists/apache.txt"
+				"https://lists.blocklist.de/lists/imap.txt"
+				"https://lists.blocklist.de/lists/bots.txt"
+				"https://lists.blocklist.de/lists/bruteforcelogin.txt"
+				"https://lists.blocklist.de/lists/strongips.txt"
+				"https://feodotracker.abuse.ch/downloads/ipblocklist.txt"
+				"https://feodotracker.abuse.ch/blocklist/"
+				"https://bazaar.abuse.ch/export/txt/md5/recent/"
+				"https://threatfox.abuse.ch/export/csv/md5/recent/"
+				"https://bazaar.abuse.ch/export/txt/sha1/recent/"
+				"https://bazaar.abuse.ch/export/txt/sha256/recent/"
+				"https://threatfox.abuse.ch/export/csv/sha256/recent/"
+				"https://sslbl.abuse.ch/blacklist/sslblacklist.csv"
+				"https://threatfox.abuse.ch/export/csv/urls/recent/"
+				"https://raw.githubusercontent.com/aptnotes/data/master/APTnotes.csv"
+				"https://raw.githubusercontent.com/aptnotes/data/master/APTnotes.csv"
+				"https://www.binarydefense.com/banlist.txt"
+				"https://raw.githubusercontent.com/fox-it/cobaltstrike-extraneous-space/master/cobaltstrike-servers.csv"
+				"https://www.cisa.gov/sites/default/files/csv/known_exploited_vulnerabilities.csv"
+				"https://misp.cert.ssi.gouv.fr/feed-misp/hashes.csv"
+				"https://github.com/carbonblack/active_c2_ioc_public/blob/main/cobaltstrike/actor-specific/cobaltstrike_luckymouse_ta428.csv"
+				"https://github.com/carbonblack/active_c2_ioc_public/blob/main/cobaltstrike/actor-specific/cobaltstrike_pyxie.csv"
+				"https://github.com/carbonblack/active_c2_ioc_public/blob/main/shadowpad/shadowpad_202209.tsv"
+				"https://iocfeed.mrlooquer.com/feed.csv"
+				"https://iocfeed.mrlooquer.com/feed.csv"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/1.txt"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/2.txt"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/3.txt"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/4.txt"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/5.txt"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/6.txt"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/7.txt"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/8.txt"
+				"https://feeds.ecrimelabs.net/data/metasploit-cve"
+				"https://github.com/drb-ra/C2IntelFeeds/blob/master/feeds/IPC2s-30day.csv"
+				"https://github.com/drb-ra/C2IntelFeeds/blob/master/feeds/domainC2swithURLwithIP-30day-filter-abused.csv"
+				"https://github.com/drb-ra/C2IntelFeeds/blob/master/feeds/domainC2swithURLwithIP-30day-filter-abused.csv"
+				"https://github.com/drb-ra/C2IntelFeeds/blob/master/feeds/domainC2s.csv"
+				"https://github.com/montysecurity/C2-Tracker/blob/main/data/Brute%20Ratel%20C4%20IPs.txt"
+				"https://github.com/montysecurity/C2-Tracker/blob/main/data/Brute%20Ratel%20C4%20IPs.txt"
+				"https://github.com/montysecurity/C2-Tracker/blob/main/data/Sliver%20C2%20IPs.txt"
+				"https://github.com/montysecurity/C2-Tracker/blob/main/data/Posh%20C2%20IPs.txt"
+				"https://github.com/montysecurity/C2-Tracker/blob/main/data/Metasploit%20Framework%20C2%20IPs.txt"
+				"https://github.com/montysecurity/C2-Tracker/blob/main/data/Havoc%20C2%20IPs.txt"
+				"https://snort.org/downloads/ip-block-list"
+				"https://urlhaus.abuse.ch/downloads/csv_recent/"
+				"https://api.cybercure.ai/feed/get_hash?type=csv"
+				"https://phishing.army/download/phishing_army_blocklist.txt"
+				"https://phishing.army/download/phishing_army_blocklist_extended.txt"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/today.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/today.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/today.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/today.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/today.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/week.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/week.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/week.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/week.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/week.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/month.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/month.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/month.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/month.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/month.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/year.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/year.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/year.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/year.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/year.csv"
+				"https://rules.emergingthreats.net/blockrules/compromised-ips.txt"
+				"https://openphish.com/feed.txt"
+				"https://www.botvrij.eu/data/blocklist/blocklist_domain.csv"
+				"https://www.botvrij.eu/data/ioclist.md5"
+				"https://www.botvrij.eu/data/ioclist.md5"
+				"https://www.botvrij.eu/data/ioclist.sha256"
+				"https://www.botvrij.eu/data/feed-osint/hashes.csv"
+				"https://hole.cert.pl/domains/domains.csv"
+				"https://reputation.alienvault.com/reputation.generic"
+				"https://blocklist.greensnow.co/greensnow.txt"
+				"https://cinsscore.com/list/ci-badguys.txt"
+				"https://api.cybercure.ai/feed/get_url?type=csv"
+				"https://api.cybercure.ai/feed/get_ips?type=csv"
+				"https://raw.githubusercontent.com/ktsaou/blocklist-ipsets/master/firehol_level1.netset"
+				"https://mirai.security.gives/data/ip_list.txt"
+				"https://github.com/ThreatMon/ThreatMon-Daily-C2-Feeds"
+				"https://services.nvd.nist.gov/rest/json/cves/2.0"
+				"https://cdn.ellio.tech/community-feed"
+				"https://trends.netcraft.com/cybercrime/tlds"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/BurpSuite%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/Deimos%20C2%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/GoPhish%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/Gotham%20Stealer%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/Hachcat%20Cracking%20Tool%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/Metasploit%20Framework%20C2%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/Mythic%20C2%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/NimPlant%20C2%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/PANDA%20C2%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/Posh%20C2%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/PowerSploit%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/XMRig%20Monero%20Cryptominer%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/all.txt"
+				"https://urlabuse.com/public/data/data.txt"
+				"https://urlabuse.com/public/data/malware_url.txt"
+				"https://urlabuse.com/public/data/phishing_url.txt"
+				"https://urlabuse.com/public/data/hacked_url.txt"
+				"https://urlabuse.com/public/data/malware_url.txt"
+				"https://raw.githubusercontent.com/tsirolnik/spam-domains-list/master/spamdomains.txt"
+				"https://github.com/drb-ra/C2IntelFeeds/blob/master/feeds/unverified/IPC2s.csv"
+				"https://osint.digitalside.it/Threat-Intel/lists/latesturls.txt"
+				"https://osint.digitalside.it/Threat-Intel/lists/latesturls.txt"
+				"https://osint.digitalside.it/Threat-Intel/lists/latestdomains.txt"
+				"https://nocdn.nrd-list.com/0/nrd-list-32-days.txt"
+				"https://nocdn.threat-list.com/0/domains.txt"
+				"https://nocdn.threat-list.com/1/domains.txt"
+				"https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+				"https://threatview.io/Downloads/Experimental-IOC-Tweets.txt"
+				"https://threatview.io/Downloads/High-Confidence-CobaltStrike-C2%20-Feeds.txt"
+				"https://threatview.io/Downloads/High-Confidence-CobaltStrike-C2%20-Feeds.txt"
+				"https://threatview.io/Downloads/IP-High-Confidence-Feed.txt"
+				"https://lists.blocklist.de/lists/ftp.txt"
+				"https://threatview.io/Downloads/DOMAIN-High-Confidence-Feed.txt"
+				"https://threatview.io/Downloads/MD5-HASH-ALL.txt"
+				"https://threatview.io/Downloads/URL-High-Confidence-Feed.txt"
+				"https://threatview.io/Downloads/SHA-HASH-FEED.txt"
+				"https://api.ransomware.live/allcyberattacks"
+				"https://sslbl.abuse.ch/blacklist/ja3_fingerprints.csv"
+				"https://blocklists.0dave.ch/ssh.txt"
+				"https://github.com/X4BNet/lists_vpn/blob/main/output/vpn/ipv4.txt"
+				"https://github.com/mthcht/awesome-lists/blob/main/Lists/suspicious_named_pipe_list.csv"
+				"https://github.com/mthcht/awesome-lists/blob/main/Lists/VPN/NordVPN/nordvpn_ips_list.csv"
+				"https://github.com/mthcht/awesome-lists/blob/main/Lists/VPN/ProtonVPN/protonvpn_ip_list.csv"
+				"https://www.dan.me.uk/torlist/?exit"
+				"https://www.dan.me.uk/torlist/?full"
+    )
+
+    # Loop through each feed URL
+    for FEED_URL in "${FEED_URLS[@]}"; do
+        echo "Fetching threat feed from: $FEED_URL"
+        
+        # Fetch the threat feed and process each line
+        wget -qO- "$FEED_URL" | while read -r line; do
+            # Check if the line contains a valid IP (basic check for IPv4 format)
+            if [[ "$line" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                # Add the IP to an ipset (blocklist)
+                ipset add blacklist "$line" 2>/dev/null
+                # Add an iptables rule to block the IP from incoming connections
+                iptables -A INPUT -m set --match-set blacklist src -j DROP
+                echo "Blocked IP: $line"
+            # Check if the line contains a valid URL
+            elif [[ "$line" =~ ^http(s)?:// ]]; then
+                # Add the URL to a URL blocklist (replace with your method to block URLs)
+                echo "Blocked URL: $line"
+            # Check if the line contains a valid MD5 hash (32 hex characters)
+            elif [[ "$line" =~ ^[a-fA-F0-9]{32}$ ]]; then
+                # Process MD5 hash (e.g., add to your hash blocklist)
+                echo "Blocked MD5 hash: $line"
+            # Check if the line contains a valid SHA1 hash (40 hex characters)
+            elif [[ "$line" =~ ^[a-fA-F0-9]{40}$ ]]; then
+                # Process SHA1 hash (e.g., add to your hash blocklist)
+                echo "Blocked SHA1 hash: $line"
+            # Check if the line contains a valid SHA256 hash (64 hex characters)
+            elif [[ "$line" =~ ^[a-fA-F0-9]{64}$ ]]; then
+                # Process SHA256 hash (e.g., add to your hash blocklist)
+                echo "Blocked SHA256 hash: $line"
+            fi
+        done
+    done
+}
+
+
+
+initialize_ipset() {
+    ipset list blacklist 2>/dev/null || ipset create blacklist hash:ip
+}
+
+
+
+
+
 ## iptables
 
 
@@ -35,6 +260,9 @@ iptables -A INPUT -p tcp --dport 22 -m limit --limit 3/min --limit-burst 5 -j AC
 iptables -A INPUT -j LOG --log-prefix "Dropped: " --log-level 4
 iptables -A INPUT -m conntrack --ctstate INVALID -j DROP
 
+# Improved Intrusion Prevention
+sudo iptables -A INPUT -p tcp --dport 22 -i eth0 -m recent --set --name SSH
+sudo iptables -A INPUT -p tcp --dport 22 -i eth0 -m recent --rcheck --seconds 60 --hitcount 5 -j DROP
 
 
 #Avoid unnecessary rules: Keep the ruleset as simple as possible by avoiding redundant or unnecessary rules. Each rule adds overhead, so only add rules that are necessary for your use case.
@@ -58,7 +286,7 @@ iptables -A INPUT -m set --match-set myset src -j ACCEPT
 ### iptables-save
 
 iptables-save >/etc/iptables/rules.v4
-
+fetch_threat_feed
 
 }
 
@@ -74,7 +302,7 @@ sysctl -w net.ipv4.tcp_syncookies=1 # Enable Syn Cookies Protection
 sysctl -w fs.file-max=1000000 # Increase the Maximum Number of Connections
 ulimit -n 65535
 
-#  Disable Source Routed Packets 
+#  Disable Source Routed Packets
 sysctl -w net.ipv4.conf.all.accept_source_route=0
 sysctl -w net.ipv4.conf.default.accept_source_route=0
 
@@ -100,7 +328,7 @@ sysctl -w net.ipv4.conf.default.log_martians=1
 sysctl -w net.ipv4.tcp_rmem="4096 87380 16777216"
 sysctl -w net.ipv4.tcp_wmem="4096 16384 16777216"
 
-# Enable TCP Fast Open 
+# Enable TCP Fast Open
 
 sysctl -w net.ipv4.tcp_fastopen=3
 
@@ -230,7 +458,7 @@ pkg-config libhwloc-dev cmake cpputest libsqlite3-dev uuid-dev \
 libcmocka-dev libnetfilter-queue-dev libmnl-dev autotools-dev \
 libluajit-5.1-dev libunwind-dev libfl-dev -y
 
-cd /tmp 
+cd /tmp
 mkdir snort-source-files && cd snort-source-files
 git clone https://github.com/snort3/libdaq.git
 cd libdaq
@@ -266,7 +494,7 @@ sudo apt install ethtool -y
 ethtool -k $network_interface | grep receive-offload
 ethtool -K $network_interface gro off lro off
 
-echo """  
+echo """
 [Unit]
 Description=Set Snort 3 NIC in promiscuous mode and Disable GRO, LRO on boot
 After=network.target
@@ -438,9 +666,26 @@ echo "rkhunter installation and configuration complete. You can now check logs i
 sudo apt install chkrootkit -y
 
 
+sudo apt install yara -y
+
+git clone  https://github.com/iomoath/yara-scanner.git
+
+cd yara-scanner
+virtualenv venv
+source venv/bin/activate
+pip3 install yara-python
+deactivate
+cd
+
 
 
 }
+
+
+configure_vul_scanner(){
+	sudo apt install lynis -y
+}
+
 
 
 
@@ -451,9 +696,23 @@ update_av(){
 	sudo systemctl start clamav-freshclam
 	sudo /usr/local/sbin/maldet -u
 	sudo rkhunter –-update
+
 }
 
+scan_av(){
+	sudo clamcan --remove --infected --recursive /
+	sudo maldet -a
+	sudo rkhunter --check --skip-keypress
+	sudo chkrootkit
+	cd yara-scanner
+	source venv/bin/activate
+	python yara_main.py --scan-dir '/' --verbose
+	deactivate
+}
 
+vul_check(){
+	sudo lynis audit system
+}
 
 
 configure_monitoring(){
@@ -550,6 +809,8 @@ echo "SSH root login is disabled and automatic updates have been enabled."
 
 
 
+
+
 help(){
 
 echo "--------------- HELP ---------------"
@@ -557,14 +818,17 @@ echo "--configure"
 echo -e "\t--firewall : configure firewall tools"
 echo -e "\t--kernel : configure Kernel Parameters"
 echo -e "\t--service-manager : configure Fail2Ban"
-echo -e "\t--ids/ips : configurec Zeek and snort and maltrail"
-echo -e "\t--ids/ips --add-rule '<rule>' : You can Add your Custom Rule for Snort"
+echo -e "\t--ids/ips : configurec Zeek and snort and Maltrail"
 echo -e "\t--av : configure clamAV and Maldet and RKhunter and chkrootkit and Yara"
-echo -e "\t--av --update : update clamAV and Maldet and RKhunter Database"
-echo -e "\t--monitoring : configure Netdata"
+echo -e "\t--monitoring : configure Netdata (ip:19999)"
 echo -e "\t--hardening : Hardening system"
-
-
+echo -e "\t--vul : Configure Vulnerability check Tools"
+echo "--ids/ips"
+echo -e "\t--add-rule '<rule>' : You can Add your Custom Rule for Snort"
+echo "--vulcheck : scan vulnerability with Lynis"
+echo "--av"
+echo -e "\t--scan : Start Scan with clamAV,Maldet,Rkhunter,chkrootkit,YARA"
+echo -e "\t--update : update clamAV and Maldet and RKhunter Database"
 
 
 }
@@ -572,38 +836,58 @@ echo -e "\t--hardening : Hardening system"
 
 if [ "$1" == "--configure" ];then
 	if [ "$2" == "--firewall" ];then
+		configure_basic
 		configure_fw
 	elif [ "$2" == "--kernel" ];then
+		configure_basic
 		configure_network_kernel
 	elif [ "$2" == "--service-manager" ];then
+		configure_basic
 		configure_service_manager
-	elif [ "$2" == "--ids/ips" ];then
-		if [ "$3" == "--add-rule" ];then
-			rule="$4"
-			echo $4 | sudo tee -a /usr/local/etc/rules/local.rules
-			echo "rule Added to custom Rules [ OK ]"
-		else
 
+	elif [ "$2" == "--ids/ips" ];then
+			configure_basic
 			configure_ids
-		fi
 
 	elif [ "$2" == "--av" ];then
-		if [ "$3" == "--update" ];then
-			update_av
-		else
+			configure_basic
 			configure_av
-		fi
+		
 	elif [ "$2" == "--monitoring" ];then
+		configure_basic
 		configure_monitoring
 	elif [ "$2" == "--hardening" ];then
+		configure_basic
 		system_hardening
+
+	elif [ "$2" == "--vul" ];then
+		configure_basic
+		configure_vul_scanner
+	
 	else
 		help
 	fi
+
+elif [ "$1" == "--ids/ips" ];then
+	if [ "$2" == "--add-rule" ];then
+		rule="$4"
+		echo $4 | sudo tee -a /usr/local/etc/rules/local.rules
+		echo "rule Added to custom Rules [ OK ]"
+	else
+		help
+	fi
+elif [ "$1" == "--av" ];then
+	if [ "$2" == "--scan" ];then
+		scan_av
+	elif [ "$3" == "--update" ];then
+			update_av
+	else
+		help
+	fi		
+elif [ "$1" == "--vulcheck" ];then
+	vul_check	
 elif [ "$1" == "--help" ];then
 	help
 else
-	echo "Error.Edit command"
+	help
 fi
-
-
