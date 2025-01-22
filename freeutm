@@ -4,11 +4,21 @@
 
 
 
+
+## This is BAsic Tools to Manage Bandwidth and send Mail and More... 
 configure_basic(){
 
 sudo apt install mailutils -y
 sudo apt install git -y
 sudo apt install wondershaper -y
+
+}
+
+
+
+# Email Alert for All Services in Linux system
+
+email_alerts(){
 
 # 1. iptables Email Alerts
 echo "* * * * * root tail -n 20 /var/log/syslog | grep 'Dropped:' | mail -s 'Critical iptables Event' youremail@example.com" | sudo tee -a /etc/crontab
@@ -31,8 +41,9 @@ echo "0 3 * * * /usr/bin/rkhunter --check --cronjob --report-warnings-only" | su
 
 
 
-}
 
+
+}
 
 
 
@@ -224,8 +235,6 @@ fetch_threat_feed() {
 initialize_ipset() {
     ipset list blacklist 2>/dev/null || ipset create blacklist hash:ip
 }
-
-
 
 
 
@@ -452,11 +461,11 @@ sudo apt-cache policy snort
 sudo apt update
 sudo apt upgrade -y
 sudo apt install build-essential libpcap-dev libpcre3-dev \
-libnet1-dev zlib1g-dev luajit hwloc libdnet-dev \
-libdumbnet-dev bison flex liblzma-dev openssl libssl-dev \
-pkg-config libhwloc-dev cmake cpputest libsqlite3-dev uuid-dev \
-libcmocka-dev libnetfilter-queue-dev libmnl-dev autotools-dev \
-libluajit-5.1-dev libunwind-dev libfl-dev -y
+	libnet1-dev zlib1g-dev luajit hwloc libdnet-dev \
+	libdumbnet-dev bison flex liblzma-dev openssl libssl-dev \
+	pkg-config libhwloc-dev cmake cpputest libsqlite3-dev uuid-dev \
+	libcmocka-dev libnetfilter-queue-dev libmnl-dev autotools-dev \
+	libluajit-5.1-dev libunwind-dev libfl-dev -y
 
 cd /tmp
 mkdir snort-source-files && cd snort-source-files
@@ -544,7 +553,8 @@ sudo apt update -y
 sudo apt install clamav -y
 
 
-sudo systemctl stop clam
+sudo systemctl stop clamav-freshclam
+sudo freshclam
 
 # Update ClamAV's virus database
 
@@ -838,6 +848,7 @@ if [ "$1" == "--configure" ];then
 	if [ "$2" == "--firewall" ];then
 		configure_basic
 		configure_fw
+		email_alerts
 	elif [ "$2" == "--kernel" ];then
 		configure_basic
 		configure_network_kernel
@@ -852,6 +863,7 @@ if [ "$1" == "--configure" ];then
 	elif [ "$2" == "--av" ];then
 			configure_basic
 			configure_av
+			email_alerts
 		
 	elif [ "$2" == "--monitoring" ];then
 		configure_basic
