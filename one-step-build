@@ -2,7 +2,7 @@
 
 # Define the package name and version
 PACKAGE_NAME="freeutm"
-VERSION="1.0"
+VERSION="2.0"
 ARCHITECTURE="amd64"
 CONTROL_FILE="DEBIAN/control"
 
@@ -10,8 +10,8 @@ CONTROL_FILE="DEBIAN/control"
 mkdir -p ${PACKAGE_NAME}-${VERSION}/{DEBIAN,usr/local/bin}
 
 # Copy the shell script into the proper location (assumes freeutm.sh is in the same directory as this script)
-cp freeutm.sh ${PACKAGE_NAME}-${VERSION}/usr/local/bin/
-chmod +x ${PACKAGE_NAME}-${VERSION}/usr/local/bin/freeutm.sh
+cp freeutm ${PACKAGE_NAME}-${VERSION}/usr/local/bin/
+chmod +x ${PACKAGE_NAME}-${VERSION}/usr/local/bin/freeutm
 
 # Create the control file with metadata for the package
 cat <<EOF > ${PACKAGE_NAME}-${VERSION}/${CONTROL_FILE}
