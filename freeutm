@@ -10,6 +10,15 @@ configure_basic(){
 
 sudo apt install mailutils -y
 sudo apt install git -y
+sudo apt install wget -y
+sudo apt install curl -y
+
+### Use the wondershaper command to apply limits to your interface. For example, to set a download limit of 1 Mbps and an upload limit of 512 Kbps on the interface eth0, run the following command:
+## sudo wondershaper eth0 1024 512
+## eth0 is the network interface.
+## 1024 is the maximum download speed in kilobits per second (1 Mbps).
+## 512 is the maximum upload speed in kilobits per second (512 Kbps).
+
 sudo apt install wondershaper -y
 
 }
@@ -684,6 +693,7 @@ cd yara-scanner
 virtualenv venv
 source venv/bin/activate
 pip3 install yara-python
+python3 yara_main.py --update
 deactivate
 cd
 
@@ -710,7 +720,7 @@ update_av(){
 }
 
 scan_av(){
-	sudo clamcan --remove --infected --recursive /
+	sudo clamscan --remove --infected --recursive /
 	sudo maldet -a
 	sudo rkhunter --check --skip-keypress
 	sudo chkrootkit
