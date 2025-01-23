@@ -8,6 +8,12 @@ Both distributions are stable and widely supported by the community, making them
 
 ---
 
+**Note 1- First open Script and chnage Email Address with Valid Mail**
+
+
+
+
+
 ## 2. Configuration Commands
 
 ### Firewall Configuration
@@ -30,19 +36,9 @@ freeutm --configure --service-manager   # Configure Fail2Ban
 freeutm --configure --ids/ips   # Configure Zeek, Snort, and Maltrail
 ```
 
-### Adding Custom Rule to IDS/IPS
-```bash
-freeutm --configure --ids/ips --add-rule '<rule>'   # Add new rule to local.rules
-```
-
 ### Antivirus Configuration (ClamAV, Maldet, RKhunter, chkrootkit, Yara)
 ```bash
 freeutm --configure --av   # Configure ClamAV, Maldet, RKhunter, chkrootkit, and Yara
-```
-
-### Update Antivirus Database
-```bash
-freeutm --configure --av --update   # Update antivirus database
 ```
 
 ### Monitoring Configuration (Netdata)
@@ -54,6 +50,29 @@ freeutm --configure --monitoring   # Configure Netdata for system monitoring
 ```bash
 freeutm --configure --hardening   # Harden system security settings
 ```
+
+### Scan system with AV
+
+```bash
+freeutm --av --scan
+```
+
+### Update Antivirus Database
+```bash
+freeutm --av --update   # Update antivirus database
+```
+
+### check Vulnerability
+
+```bash
+freeutm --vulcheck 
+```
+
+### Adding Custom Rule to IDS/IPS
+```bash
+freeutm --ids/ips --add-rule '<rule>'   # Add new rule to local.rules
+```
+
 
 ---
 
