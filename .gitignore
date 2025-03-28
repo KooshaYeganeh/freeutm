@@ -5,7 +5,7 @@ __pycache__/
 # C extensions
 *.so
 TODO.md
-
+web/
 # Distribution / packaging
 .Python
 build/
