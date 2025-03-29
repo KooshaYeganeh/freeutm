@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="description" content="KYGnus Services Management" />
+    <meta name="author" content="KooshaYaganeh" />
+    <title>KYGnus myUTM - Services Management</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/style.min.css" rel="stylesheet" />
+    <link href="../static/css/styles.css" rel="stylesheet" />
+    <link href="../static/css/dashboard.css" rel="stylesheet" />
+    <script src="../static/all.js" crossorigin="anonymous"></script>
+    <style>
+        .service-card {
+            transition: all 0.3s ease;
+            border-left: 4px solid #17a2b8;
+        }
+        .service-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+        .status-active {
+            background-color: #28a745;
+        }
+        .status-inactive {
+            background-color: #dc3545;
+        }
+        .status-warning {
+            background-color: #ffc107;
+        }
+        .service-table {
+            font-size: 0.9rem;
+        }
+        .service-actions {
+            white-space: nowrap;
+        }
+        .nav-tabs .nav-link.active {
+            font-weight: bold;
+            border-bottom: 3px solid #17a2b8;
+        }
+    </style>
+</head>
+<body class="sb-nav-fixed">
+    <nav class="sb-topnav navbar navbar-expand navbar-dark bg-dark">
+        <img src="../static/white_logo.png" alt="KYGnus" height="40" class="me-2">
+        <button class="btn btn-link btn-sm order-1 order-lg-0 me-4 me-lg-0" id="sidebarToggle" href="#!">
+            <i class="fas fa-bars"></i>
+        </button>
+        
+        <div class="d-none d-md-inline-block form-inline ms-auto me-0 me-md-3 my-2 my-md-0">
+            <ul class="navbar-nav ms-auto ms-md-0 me-3 me-lg-4">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" id="navbarDropdown" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-user fa-fw"></i> {{username}}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
+                        <li><span class="dropdown-item-text">Time: {{now_time}}</span></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="/info"><i class="fas fa-info-circle me-1"></i> System Info</a></li>
+                        <li><a class="dropdown-item" href="/logout"><i class="fas fa-sign-out-alt me-1"></i> Logout</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <div id="layoutSidenav">
+        <div id="layoutSidenav_nav">
+            <nav class="sb-sidenav accordion sb-sidenav-dark" id="sidenavAccordion">
+                <div class="sb-sidenav-menu">
+                    <div class="nav">
+                        <div class="sb-sidenav-menu-heading">Core</div>
+                        <a class="nav-link" href="/home">
+                            <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
+                            Dashboard
+                        </a>
+
+                        <div class="nav-section services mt-3">
+                            <div class="sb-sidenav-menu-heading">Services</div>
+                            <a class="nav-link active" href="/services/list">
+                                <div class="sb-nav-link-icon"><i class="fas fa-server"></i></div>
+                                Services List
+                            </a>
+                            <a class="nav-link" href="/services/start">
+                                <div class="sb-nav-link-icon"><i class="fas fa-power-off"></i></div>
+                                Startup Services
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="sb-sidenav-footer">
+                    <div class="small">Logged in as: {{username}}</div>
+                    <div class="small">System Time: {{now_time}}</div>
+                </div>
+            </nav>
+        </div>
+
+        <div id="layoutSidenav_content">
+            <main>
+                <div class="container-fluid px-4">
+                    <h1 class="mt-4">Services Management</h1>
+                    <ol class="breadcrumb mb-4">
+                        <li class="breadcrumb-item"><a href="/home">Dashboard</a></li>
+                        <li class="breadcrumb-item active">Services</li>
+                    </ol>
+
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <i class="fas fa-table me-1"></i>
+                            System Services
+                            <div class="float-end">
+                                <button class="btn btn-sm btn-outline-secondary" onclick="window.location.reload()">
+                                    <i class="fas fa-sync-alt me-1"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <ul class="nav nav-tabs mb-3" id="servicesTab" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link active" id="all-tab" data-bs-toggle="tab" data-bs-target="#all" type="button" role="tab" aria-controls="all" aria-selected="true">
+                                        All Services
+                                    </button>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <button class="nav-link" id="enabled-tab" data-bs-toggle="tab" data-bs-target="#enabled" type="button" role="tab" aria-controls="enabled" aria-selected="false">
+                                        Enabled Services
+                                    </button>
+                                </li>
+                            </ul>
+                            
+                            <div class="tab-content" id="servicesTabContent">
+                                <div class="tab-pane fade show active" id="all" role="tabpanel" aria-labelledby="all-tab">
+                                    <div class="table-responsive">
+                                        <table class="table table-striped table-hover service-table" id="servicesTable">
+                                            <thead>
+                                                <tr>
+                                                    <th>Service</th>
+                                                    <th>Status</th>
+                                                    <th>Description</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for service in services %}
+                                                    {% if service and not service.startswith('UNIT') and not service.startswith('LOAD') and not service.startswith('ACTIVE') and not service.startswith('SUB') %}
+                                                        {% set parts = service.split() %}
+                                                        {% if parts|length >= 5 %}
+                                                            {% set service_name = parts[0] %}
+                                                            {% set service_status = parts[3] %}
+                                                            {% set service_desc = ' '.join(parts[4:]) %}
+                                                            <tr>
+                                                                <td>{{ service_name }}</td>
+                                                                <td>
+                                                                    <span class="status-indicator {% if service_status == 'active' %}status-active{% else %}status-inactive{% endif %}"></span>
+                                                                    {{ service_status }}
+                                                                </td>
+                                                                <td>{{ service_desc }}</td>
+                                                                <td class="service-actions">
+                                                                    <div class="btn-group btn-group-sm">
+                                                                        <a href="/services/restart/{{ service_name }}" class="btn btn-outline-secondary" title="Restart">
+                                                                            <i class="fas fa-redo"></i>
+                                                                        </a>
+                                                                        {% if service_status == 'active' %}
+                                                                            <a href="/services/stop/{{ service_name }}" class="btn btn-outline-danger" title="Stop">
+                                                                                <i class="fas fa-stop"></i>
+                                                                            </a>
+                                                                        {% else %}
+                                                                            <a href="/services/start/{{ service_name }}" class="btn btn-outline-success" title="Start">
+                                                                                <i class="fas fa-play"></i>
+                                                                            </a>
+                                                                        {% endif %}
+                                                                        <a href="/services/status/{{ service_name }}" class="btn btn-outline-info" title="Details">
+                                                                            <i class="fas fa-info-circle"></i>
+                                                                        </a>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        {% endif %}
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                
+                                <div class="tab-pane fade" id="enabled" role="tabpanel" aria-labelledby="enabled-tab">
+                                    <div class="table-responsive">
+                                        <table class="table table-striped table-hover service-table" id="enabledTable">
+                                            <thead>
+                                                <tr>
+                                                    <th>Service</th>
+                                                    <th>Status</th>
+                                                    <th>Vendor Preset</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% for service in services %}
+                                                    {% if service and not service.startswith('UNIT') and not service.startswith('LOAD') and not service.startswith('ACTIVE') and not service.startswith('SUB') %}
+                                                        {% set parts = service.split() %}
+                                                        {% if parts|length >= 2 %}
+                                                            {% set service_name = parts[0] %}
+                                                            {% set service_state = parts[1] %}
+                                                            <tr>
+                                                                <td>{{ service_name }}</td>
+                                                                <td>
+                                                                    <span class="status-indicator {% if service_state == 'enabled' %}status-active{% else %}status-inactive{% endif %}"></span>
+                                                                    {{ service_state }}
+                                                                </td>
+                                                                <td>{{ parts[2] if parts|length >= 3 else '' }}</td>
+                                                                <td class="service-actions">
+                                                                    <div class="btn-group btn-group-sm">
+                                                                        {% if service_state == 'enabled' %}
+                                                                            <a href="/services/disable/{{ service_name }}" class="btn btn-outline-warning" title="Disable">
+                                                                                <i class="fas fa-toggle-off"></i>
+                                                                            </a>
+                                                                        {% else %}
+                                                                            <a href="/services/enable/{{ service_name }}" class="btn btn-outline-success" title="Enable">
+                                                                                <i class="fas fa-toggle-on"></i>
+                                                                            </a>
+                                                                        {% endif %}
+                                                                        <a href="/services/status/{{ service_name }}" class="btn btn-outline-info" title="Details">
+                                                                            <i class="fas fa-info-circle"></i>
+                                                                        </a>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        {% endif %}
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-lg-6">
+                            <div class="card mb-4">
+                                <div class="card-header">
+                                    <i class="fas fa-rocket me-1"></i>
+                                    Quick Actions
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <a href="/services/restart-all" class="btn btn-outline-primary w-100" onclick="return confirm('Restart all services?')">
+                                                <i class="fas fa-redo me-1"></i> Restart All
+                                            </a>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <a href="/services/reload-all" class="btn btn-outline-secondary w-100" onclick="return confirm('Reload all services?')">
+                                                <i class="fas fa-sync-alt me-1"></i> Reload All
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <button class="btn btn-outline-success w-100" data-bs-toggle="modal" data-bs-target="#startServiceModal">
+                                                <i class="fas fa-plus-circle me-1"></i> Start Service
+                                            </button>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <button class="btn btn-outline-danger w-100" data-bs-toggle="modal" data-bs-target="#stopServiceModal">
+                                                <i class="fas fa-stop-circle me-1"></i> Stop Service
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="card mb-4">
+                                <div class="card-header">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    System Service Information
+                                </div>
+                                <div class="card-body">
+                                    <h5>Common Commands:</h5>
+                                    <ul class="list-unstyled">
+                                        <li><code>systemctl start &lt;service&gt;</code> - Start a service</li>
+                                        <li><code>systemctl stop &lt;service&gt;</code> - Stop a service</li>
+                                        <li><code>systemctl restart &lt;service&gt;</code> - Restart a service</li>
+                                        <li><code>systemctl enable &lt;service&gt;</code> - Enable at boot</li>
+                                        <li><code>systemctl disable &lt;service&gt;</code> - Disable at boot</li>
+                                        <li><code>systemctl status &lt;service&gt;</code> - Check service status</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <!-- Start Service Modal -->
+            <div class="modal fade" id="startServiceModal" tabindex="-1" aria-labelledby="startServiceModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="startServiceModalLabel">Start Service</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form method="POST" action="/services/start-custom">
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label for="serviceName" class="form-label">Service Name</label>
+                                    <input type="text" class="form-control" id="serviceName" name="service_name" required>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Start Service</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stop Service Modal -->
+            <div class="modal fade" id="stopServiceModal" tabindex="-1" aria-labelledby="stopServiceModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="stopServiceModalLabel">Stop Service</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <form method="POST" action="/services/stop-custom">
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label for="serviceNameStop" class="form-label">Service Name</label>
+                                    <input type="text" class="form-control" id="serviceNameStop" name="service_name" required>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-danger">Stop Service</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <footer class="py-4 bg-light mt-auto">
+                <div class="container-fluid px-4">
+                    <div class="d-flex align-items-center justify-content-between small">
+                        <div class="text-muted">Copyright &copy; KYGnus Security Dashboard 2023</div>
+                        <div>
+                            <a href="https://github.com/KooshaYeganeh">GitHub</a>
+                            &middot;
+                            <a href="https://kooshayeganeh.github.io/">KYGnus</a>
+                        </div>
+                    </div>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js"></script>
+    <script src="../static/js/scripts.js"></script>
+    <script>
+        // Initialize DataTables
+        window.addEventListener('DOMContentLoaded', event => {
+            const servicesTable = new simpleDatatables.DataTable('#servicesTable', {
+                perPage: 10,
+                labels: {
+                    placeholder: "Search services...",
+                    searchTitle: "Search within table",
+                    perPage: "services per page",
+                    noRows: "No services found",
+                    info: "Showing {start} to {end} of {rows} services"
+                }
+            });
+            
+            const enabledTable = new simpleDatatables.DataTable('#enabledTable', {
+                perPage: 10,
+                labels: {
+                    placeholder: "Search enabled services...",
+                    searchTitle: "Search within table",
+                    perPage: "services per page",
+                    noRows: "No enabled services found",
+                    info: "Showing {start} to {end} of {rows} services"
+                }
+            });
+
+            // Tab persistence
+            const servicesTab = document.getElementById('servicesTab');
+            if (servicesTab) {
+                servicesTab.addEventListener('click', function(e) {
+                    if (e.target && e.target.matches('button.nav-link')) {
+                        localStorage.setItem('lastServicesTab', e.target.id);
+                    }
+                });
+                
+                const lastTab = localStorage.getItem('lastServicesTab');
+                if (lastTab) {
+                    const tab = document.querySelector('#' + lastTab);
+                    if (tab) {
+                        const tabInstance = new bootstrap.Tab(tab);
+                        tabInstance.show();
+                    }
+                }
+            }
+        });
+
+        // Auto-refresh every 60 seconds
+        setTimeout(function(){
+            window.location.reload();
+        }, 60000);
+    </script>
+</body>
+</html>
