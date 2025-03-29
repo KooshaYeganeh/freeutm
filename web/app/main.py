@@ -13,6 +13,10 @@ import psutil
 import platform
 import socket
 from functools import wraps
+from flask import render_template, request, redirect, url_for, flash, send_file
+import os
+import datetime
+from werkzeug.utils import secure_filename
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -366,20 +370,189 @@ def chkrootkit():
 
 
 
-@app.route('/av/yara', methods=['GET', 'POST'])
+
+
+
+
+
+
+
+# Configuration
+YARA_RULES_DIR = '/etc/yara/rules'  # Directory to store YARA rules
+ALLOWED_EXTENSIONS = {'yara', 'yar', 'txt'}  # Allowed file extensions
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+@app.route('/av/yara')
+@login_required
+def yara_get_main():
+    """Display YARA management interface"""
+    rules = get_yara_rules()
+    return render_template("yara.html", 
+                         yara_rules=rules,
+                         yara_rule_count=len(rules),
+                         active_tab='yara')
+
+
+
+def get_yara_rules():
+    """Get all YARA rules from the rules directory"""
+    rules = []
+    if os.path.exists(YARA_RULES_DIR):
+        for filename in os.listdir(YARA_RULES_DIR):
+            if filename.endswith(('.yara', '.yar')):
+                rule_path = os.path.join(YARA_RULES_DIR, filename)
+                created = datetime.datetime.fromtimestamp(os.path.getctime(rule_path))
+                with open(rule_path, 'r') as f:
+                    content = f.read()
+                rules.append({
+                    'name': os.path.splitext(filename)[0],
+                    'description': get_rule_description(content),
+                    'content': content,
+                    'created_at': created.strftime('%Y-%m-%d %H:%M')
+                })
+    return rules
+
+def get_rule_description(content):
+    """Extract description from YARA rule meta section"""
+    import re
+    match = re.search(r'description\s*=\s*"([^"]+)"', content)
+    return match.group(1) if match else "No description"
+
+@app.route('/av/yara')
+@login_required
+def yara_get():
+    """Display YARA management interface"""
+    rules = get_yara_rules()
+    return render_template("av.html", 
+                         yara_rules=rules,
+                         yara_rule_count=len(rules),
+                         active_tab='yara')
+
+@app.route('/av/yara/add', methods=['POST'])
 @login_required
 @sudo_required
-def yara():
-    if request.method == 'POST':
-        path = request.form.get('path', '/')
-        success, output = run_command(f"chkrootkit", sudo=True)
-        if success:
-            flash(f"chkrootkit scan completed for {path}", "success")
-        else:
-            flash(f"Scan failed: {output}", "danger")
-        return redirect(url_for('chkrootkit'))
+def yara_add():
+    """Add a new YARA rule"""
+    rule_name = request.form.get('rule_name')
+    rule_content = request.form.get('rule_content')
+    rule_file = request.files.get('rule_file')
     
-    return render_template('av.html')
+    if not rule_name:
+        flash('Rule name is required', 'danger')
+        return redirect(url_for('yara_get'))
+    
+    # Handle file upload
+    if rule_file and rule_file.filename:
+        if not allowed_file(rule_file.filename):
+            flash('Invalid file type', 'danger')
+            return redirect(url_for('yara_get'))
+        
+        filename = secure_filename(rule_file.filename)
+        rule_name = os.path.splitext(filename)[0]
+        rule_content = rule_file.read().decode('utf-8')
+    
+    if not rule_content:
+        flash('Rule content is required', 'danger')
+        return redirect(url_for('yara_get'))
+    
+    # Save the rule
+    rule_path = os.path.join(YARA_RULES_DIR, f"{rule_name}.yara")
+    try:
+        os.makedirs(YARA_RULES_DIR, exist_ok=True)
+        with open(rule_path, 'w') as f:
+            f.write(rule_content)
+        flash(f'YARA rule "{rule_name}" added successfully', 'success')
+    except Exception as e:
+        flash(f'Failed to save rule: {str(e)}', 'danger')
+    
+    return redirect(url_for('yara_get'))
+
+@app.route('/av/yara/scan', methods=['POST'])
+@login_required
+@sudo_required
+def yara_scan():
+    """Scan files with YARA rules"""
+    scan_path = request.form.get('path', '/')
+    selected_rules = request.form.getlist('rules')
+    recursive = 'recursive' in request.form
+    
+    if not selected_rules:
+        flash('Please select at least one rule', 'danger')
+        return redirect(url_for('yara_get'))
+    
+    # Build the YARA command
+    rule_files = [os.path.join(YARA_RULES_DIR, f"{rule}.yara") for rule in selected_rules]
+    rule_files = ' '.join(f'"{f}"' for f in rule_files if os.path.exists(f))
+    
+    if not rule_files:
+        flash('No valid rules selected', 'danger')
+        return redirect(url_for('yara_get'))
+    
+    recursive_flag = '-r' if recursive else ''
+    cmd = f'yara {recursive_flag} {rule_files} "{scan_path}"'
+    
+    success, output = run_command(cmd, sudo=True)
+    
+    if success:
+        flash(f'YARA scan completed for {scan_path}', 'success')
+    else:
+        flash(f'Scan failed: {output}', 'danger')
+    
+    # Return to YARA tab with results
+    rules = get_yara_rules()
+    return render_template("av.html", 
+                         yara_rules=rules,
+                         yara_rule_count=len(rules),
+                         yara_scan_results=output if success else None,
+                         active_tab='yara')
+
+@app.route('/av/yara/delete/<rule_name>')
+@login_required
+@sudo_required
+def yara_delete(rule_name):
+    """Delete a YARA rule"""
+    rule_path = os.path.join(YARA_RULES_DIR, f"{rule_name}.yara")
+    try:
+        if os.path.exists(rule_path):
+            os.remove(rule_path)
+            flash(f'YARA rule "{rule_name}" deleted successfully', 'success')
+        else:
+            flash('Rule not found', 'danger')
+    except Exception as e:
+        flash(f'Failed to delete rule: {str(e)}', 'danger')
+    
+    return redirect(url_for('yara_get'))
+
+@app.route('/av/yara/download/<rule_name>')
+@login_required
+def yara_download(rule_name):
+    """Download a YARA rule file"""
+    rule_path = os.path.join(YARA_RULES_DIR, f"{rule_name}.yara")
+    if os.path.exists(rule_path):
+        return send_file(
+            rule_path,
+            as_attachment=True,
+            download_name=f"{rule_name}.yara",
+            mimetype='text/plain'
+        )
+    flash('Rule not found', 'danger')
+    return redirect(url_for('yara_get'))
+
+@app.route('/av/yara/view/<rule_name>')
+@login_required
+def yara_view(rule_name):
+    """View a YARA rule content"""
+    rule_path = os.path.join(YARA_RULES_DIR, f"{rule_name}.yara")
+    if os.path.exists(rule_path):
+        with open(rule_path, 'r') as f:
+            content = f.read()
+        return content, 200, {'Content-Type': 'text/plain'}
+    return 'Rule not found', 404
+
+
 
 
 
@@ -390,7 +563,7 @@ def yara():
 def services_list():
     success, output = run_command("systemctl list-units --type=service --no-pager", sudo=True)
     services = output.split('\n') if success else []
-    return render_template('services/list.html', services=services)
+    return render_template('services.html', services=services)
 
 @app.route('/services/start')
 @login_required
@@ -398,7 +571,17 @@ def services_list():
 def services_start():
     success, output = run_command("systemctl list-unit-files --state=enabled --no-pager", sudo=True)
     services = output.split('\n') if success else []
-    return render_template('services/start.html', services=services)
+    return render_template('services.html', services=services)
+
+
+
+
+
+@app.route('/kernel/parameters')
+@login_required
+def kernel_get_para():
+    return render_template("kernel_management.html")
+
 
 # Kernel Routes
 @app.route('/kernel/parameters', methods=['GET', 'POST'])
@@ -417,7 +600,128 @@ def kernel_parameters():
     
     success, output = run_command("sysctl -a", sudo=True)
     params = output.split('\n') if success else []
-    return render_template('kernel/parameters.html', params=params)
+    return render_template('kernel_management.html', params=params)
+
+
+
+
+
+@app.route('/tools/install')
+@login_required
+def apt_package_manager():
+    return render_template("install_package.html")
+
+
+
+# Package Management Routes
+@app.route('/tools/install', methods=['GET', 'POST'])
+@login_required
+@sudo_required
+def install_package():
+    if request.method == 'POST':
+        package = request.form.get('package')
+        action = request.form.get('action')
+        
+        if action == 'install':
+            cmd = f"apt-get install -y {package}"
+            success_msg = f"Package {package} installed successfully"
+            error_msg = f"Failed to install {package}"
+        elif action == 'remove':
+            cmd = f"apt-get remove -y {package}"
+            success_msg = f"Package {package} removed successfully"
+            error_msg = f"Failed to remove {package}"
+        elif action == 'purge':
+            cmd = f"apt-get purge -y {package}"
+            success_msg = f"Package {package} purged successfully"
+            error_msg = f"Failed to purge {package}"
+        else:
+            flash("Invalid action", "danger")
+            return redirect(url_for('install_package'))
+        
+        success, output = run_command(cmd, sudo=True)
+        if success:
+            flash(success_msg, "success")
+        else:
+            flash(f"{error_msg}: {output}", "danger")
+        
+        return redirect(url_for('install_package'))
+    
+    return render_template('install_package.html')
+
+
+@app.route('/tools/installed')
+@login_required
+def apt_package_manager_install():
+    return render_template("installed_packages.html")
+
+@app.route('/tools/installed')
+@login_required
+def list_installed():
+    success, output = run_command("dpkg --get-selections | grep -v deinstall", sudo=False)
+    packages = []
+    
+    if success:
+        for line in output.split('\n'):
+            if line.strip():
+                pkg = line.split()[0]
+                version = get_package_version(pkg)
+                packages.append({'name': pkg, 'version': version})
+    
+    return render_template('installed_packages.html', packages=packages)
+
+
+@app.route('/tools/search')
+@login_required
+def apt_package_manager_search():
+    return render_template("search_packages.html")
+
+@app.route('/tools/search', methods=['GET', 'POST'])
+@login_required
+def search_packages():
+    if request.method == 'POST':
+        query = request.form.get('query')
+        if not query or len(query) < 2:
+            flash("Search query must be at least 2 characters", "warning")
+            return redirect(url_for('search_packages'))
+        
+        success, output = run_command(f"apt-cache search {query}", sudo=False)
+        packages = []
+        
+        if success:
+            for line in output.split('\n'):
+                if line.strip():
+                    parts = line.split(' - ')
+                    if len(parts) >= 1:
+                        name = parts[0].strip()
+                        description = parts[1].strip() if len(parts) > 1 else "No description available"
+                        packages.append({'name': name, 'description': description})
+        
+        return render_template('search_packages.html', packages=packages, query=query)
+    
+    return render_template('search_packages.html', packages=None)
+
+def get_package_version(pkg_name):
+    success, output = run_command(f"dpkg -s {pkg_name} | grep Version", sudo=False)
+    if success and output:
+        return output.split(': ')[1].strip() if ': ' in output else "Unknown"
+    return "Unknown"
+
+
+
+
+@app.route('/monitoring')
+@login_required
+@login_required
+def monitoring_netdata():
+    """Direct redirect to Netdata (kept for backward compatibility)"""
+    return redirect("http://localhost:19999/")
+
+
+
+
+
+
+
 
 # Authentication Routes
 @app.route('/login', methods=['GET', 'POST'])
