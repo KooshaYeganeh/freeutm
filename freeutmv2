@@ -1,0 +1,782 @@
+#!/bin/bash
+
+# We were, are, and will be indebted to Linus Torvalds, Richard Stallman, and ken thompson and dennis ritchie and Ian Murdock and Eric Raymond and "Jadi" and others for the open source system and the development of the Linux operating system.
+
+## This is Basic Tools to Manage Bandwidth, Services, Security and More...
+configure_basic(){
+    sudo apt install mailutils -y
+    sudo apt install git -y
+    sudo apt install wget -y
+    sudo apt install curl -y
+    sudo apt install wondershaper -y
+}
+
+# Email Alert for All Services in Linux system
+email_alerts(){
+    # 1. iptables Email Alerts
+    echo "* * * * * root tail -n 20 /var/log/syslog | grep 'Dropped:' | mail -s 'Critical iptables Event' youremail@example.com" | sudo tee -a /etc/crontab
+
+    # 2. Malware Detection Email Alerts
+    # Maldet
+    sudo sed -i 's/^email_alert="0"/email_alert="1"/' /usr/local/maldetect/conf.maldet
+    sudo sed -i 's/^email_addr=""/email_addr="youremail@example.com"/' /usr/local/maldetect/conf.maldet
+
+    # Rkhunter
+    sudo sed -i 's/^MAIL_ON_WARNINGS=.*/MAIL_ON_WARNINGS="yes"/' /etc/rkhunter.conf
+    sudo sed -i 's/^MAIL_CMD=.*/MAIL_CMD="mail -s \"rkhunter alert\" youremail@example.com"/' /etc/rkhunter.conf
+
+    # Ensure Cron Jobs are in place for Maldet and Rkhunter for daily scans and alert generation
+    echo "0 2 * * * /usr/local/maldetect/maldet --scan-all / --quiet --log-file=/var/log/maldet-scan.log" | sudo tee -a /etc/crontab
+    echo "0 3 * * * /usr/bin/rkhunter --check --cronjob --report-warnings-only" | sudo tee -a /etc/crontab
+}
+
+# Resource : https://github.com/Bert-JanP/Open-Source-Threat-Intel-Feeds?tab=readme-ov-file
+fetch_threat_feed() {
+    # List of threat feed URLs (replace with actual feed URLs)
+    FEED_URLS=(
+				"https://threatfox.abuse.ch/downloads/hostfile/"
+				"https://sslbl.abuse.ch/blacklist/sslipblacklist.csv"
+				"https://sslbl.abuse.ch/blacklist/sslipblacklist.txt"
+				"https://sslbl.abuse.ch/blacklist/sslipblacklist_aggressive.csv"
+				"https://sslbl.abuse.ch/blacklist/sslipblacklist_aggressive.txt"
+				"https://lists.blocklist.de/lists/all.txt"
+				"https://lists.blocklist.de/lists/ssh.txt"
+				"https://lists.blocklist.de/lists/mail.txt"
+				"https://lists.blocklist.de/lists/apache.txt"
+				"https://lists.blocklist.de/lists/imap.txt"
+				"https://lists.blocklist.de/lists/bots.txt"
+				"https://lists.blocklist.de/lists/bruteforcelogin.txt"
+				"https://lists.blocklist.de/lists/strongips.txt"
+				"https://feodotracker.abuse.ch/downloads/ipblocklist.txt"
+				"https://feodotracker.abuse.ch/blocklist/"
+				"https://bazaar.abuse.ch/export/txt/md5/recent/"
+				"https://threatfox.abuse.ch/export/csv/md5/recent/"
+				"https://bazaar.abuse.ch/export/txt/sha1/recent/"
+				"https://bazaar.abuse.ch/export/txt/sha256/recent/"
+				"https://threatfox.abuse.ch/export/csv/sha256/recent/"
+				"https://sslbl.abuse.ch/blacklist/sslblacklist.csv"
+				"https://threatfox.abuse.ch/export/csv/urls/recent/"
+				"https://raw.githubusercontent.com/aptnotes/data/master/APTnotes.csv"
+				"https://raw.githubusercontent.com/aptnotes/data/master/APTnotes.csv"
+				"https://www.binarydefense.com/banlist.txt"
+				"https://raw.githubusercontent.com/fox-it/cobaltstrike-extraneous-space/master/cobaltstrike-servers.csv"
+				"https://www.cisa.gov/sites/default/files/csv/known_exploited_vulnerabilities.csv"
+				"https://misp.cert.ssi.gouv.fr/feed-misp/hashes.csv"
+				"https://github.com/carbonblack/active_c2_ioc_public/blob/main/cobaltstrike/actor-specific/cobaltstrike_luckymouse_ta428.csv"
+				"https://github.com/carbonblack/active_c2_ioc_public/blob/main/cobaltstrike/actor-specific/cobaltstrike_pyxie.csv"
+				"https://github.com/carbonblack/active_c2_ioc_public/blob/main/shadowpad/shadowpad_202209.tsv"
+				"https://iocfeed.mrlooquer.com/feed.csv"
+				"https://iocfeed.mrlooquer.com/feed.csv"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/1.txt"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/2.txt"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/3.txt"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/4.txt"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/5.txt"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/6.txt"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/7.txt"
+				"https://raw.githubusercontent.com/stamparm/ipsum/master/levels/8.txt"
+				"https://feeds.ecrimelabs.net/data/metasploit-cve"
+				"https://github.com/drb-ra/C2IntelFeeds/blob/master/feeds/IPC2s-30day.csv"
+				"https://github.com/drb-ra/C2IntelFeeds/blob/master/feeds/domainC2swithURLwithIP-30day-filter-abused.csv"
+				"https://github.com/drb-ra/C2IntelFeeds/blob/master/feeds/domainC2swithURLwithIP-30day-filter-abused.csv"
+				"https://github.com/drb-ra/C2IntelFeeds/blob/master/feeds/domainC2s.csv"
+				"https://github.com/montysecurity/C2-Tracker/blob/main/data/Brute%20Ratel%20C4%20IPs.txt"
+				"https://github.com/montysecurity/C2-Tracker/blob/main/data/Brute%20Ratel%20C4%20IPs.txt"
+				"https://github.com/montysecurity/C2-Tracker/blob/main/data/Sliver%20C2%20IPs.txt"
+				"https://github.com/montysecurity/C2-Tracker/blob/main/data/Posh%20C2%20IPs.txt"
+				"https://github.com/montysecurity/C2-Tracker/blob/main/data/Metasploit%20Framework%20C2%20IPs.txt"
+				"https://github.com/montysecurity/C2-Tracker/blob/main/data/Havoc%20C2%20IPs.txt"
+				"https://snort.org/downloads/ip-block-list"
+				"https://urlhaus.abuse.ch/downloads/csv_recent/"
+				"https://api.cybercure.ai/feed/get_hash?type=csv"
+				"https://phishing.army/download/phishing_army_blocklist.txt"
+				"https://phishing.army/download/phishing_army_blocklist_extended.txt"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/today.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/today.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/today.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/today.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/today.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/week.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/week.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/week.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/week.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/week.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/month.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/month.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/month.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/month.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/month.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/year.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/year.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/year.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/year.csv"
+				"https://raw.githubusercontent.com/0xDanielLopez/TweetFeed/master/year.csv"
+				"https://rules.emergingthreats.net/blockrules/compromised-ips.txt"
+				"https://openphish.com/feed.txt"
+				"https://www.botvrij.eu/data/blocklist/blocklist_domain.csv"
+				"https://www.botvrij.eu/data/ioclist.md5"
+				"https://www.botvrij.eu/data/ioclist.md5"
+				"https://www.botvrij.eu/data/ioclist.sha256"
+				"https://www.botvrij.eu/data/feed-osint/hashes.csv"
+				"https://hole.cert.pl/domains/domains.csv"
+				"https://reputation.alienvault.com/reputation.generic"
+				"https://blocklist.greensnow.co/greensnow.txt"
+				"https://cinsscore.com/list/ci-badguys.txt"
+				"https://api.cybercure.ai/feed/get_url?type=csv"
+				"https://api.cybercure.ai/feed/get_ips?type=csv"
+				"https://raw.githubusercontent.com/ktsaou/blocklist-ipsets/master/firehol_level1.netset"
+				"https://mirai.security.gives/data/ip_list.txt"
+				"https://github.com/ThreatMon/ThreatMon-Daily-C2-Feeds"
+				"https://services.nvd.nist.gov/rest/json/cves/2.0"
+				"https://cdn.ellio.tech/community-feed"
+				"https://trends.netcraft.com/cybercrime/tlds"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/BurpSuite%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/Deimos%20C2%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/GoPhish%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/Gotham%20Stealer%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/Hachcat%20Cracking%20Tool%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/Metasploit%20Framework%20C2%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/Mythic%20C2%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/NimPlant%20C2%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/PANDA%20C2%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/Posh%20C2%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/PowerSploit%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/XMRig%20Monero%20Cryptominer%20IPs.txt"
+				"https://raw.githubusercontent.com/montysecurity/C2-Tracker/main/data/all.txt"
+				"https://urlabuse.com/public/data/data.txt"
+				"https://urlabuse.com/public/data/malware_url.txt"
+				"https://urlabuse.com/public/data/phishing_url.txt"
+				"https://urlabuse.com/public/data/hacked_url.txt"
+				"https://urlabuse.com/public/data/malware_url.txt"
+				"https://raw.githubusercontent.com/tsirolnik/spam-domains-list/master/spamdomains.txt"
+				"https://github.com/drb-ra/C2IntelFeeds/blob/master/feeds/unverified/IPC2s.csv"
+				"https://osint.digitalside.it/Threat-Intel/lists/latesturls.txt"
+				"https://osint.digitalside.it/Threat-Intel/lists/latesturls.txt"
+				"https://osint.digitalside.it/Threat-Intel/lists/latestdomains.txt"
+				"https://nocdn.nrd-list.com/0/nrd-list-32-days.txt"
+				"https://nocdn.threat-list.com/0/domains.txt"
+				"https://nocdn.threat-list.com/1/domains.txt"
+				"https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+				"https://threatview.io/Downloads/Experimental-IOC-Tweets.txt"
+				"https://threatview.io/Downloads/High-Confidence-CobaltStrike-C2%20-Feeds.txt"
+				"https://threatview.io/Downloads/High-Confidence-CobaltStrike-C2%20-Feeds.txt"
+				"https://threatview.io/Downloads/IP-High-Confidence-Feed.txt"
+				"https://lists.blocklist.de/lists/ftp.txt"
+				"https://threatview.io/Downloads/DOMAIN-High-Confidence-Feed.txt"
+				"https://threatview.io/Downloads/MD5-HASH-ALL.txt"
+				"https://threatview.io/Downloads/URL-High-Confidence-Feed.txt"
+				"https://threatview.io/Downloads/SHA-HASH-FEED.txt"
+				"https://api.ransomware.live/allcyberattacks"
+				"https://sslbl.abuse.ch/blacklist/ja3_fingerprints.csv"
+				"https://blocklists.0dave.ch/ssh.txt"
+				"https://github.com/X4BNet/lists_vpn/blob/main/output/vpn/ipv4.txt"
+				"https://github.com/mthcht/awesome-lists/blob/main/Lists/suspicious_named_pipe_list.csv"
+				"https://github.com/mthcht/awesome-lists/blob/main/Lists/VPN/NordVPN/nordvpn_ips_list.csv"
+				"https://github.com/mthcht/awesome-lists/blob/main/Lists/VPN/ProtonVPN/protonvpn_ip_list.csv"
+				"https://www.dan.me.uk/torlist/?exit"
+				"https://www.dan.me.uk/torlist/?full"
+    )
+
+    # Loop through each feed URL
+    for FEED_URL in "${FEED_URLS[@]}"; do
+        echo "Fetching threat feed from: $FEED_URL"
+        
+        # Fetch the threat feed and process each line
+        wget -qO- "$FEED_URL" | while read -r line; do
+            # Check if the line contains a valid IP (basic check for IPv4 format)
+            if [[ "$line" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                # Add the IP to an ipset (blocklist)
+                ipset add blacklist "$line" 2>/dev/null
+                # Add an iptables rule to block the IP from incoming connections
+                iptables -A INPUT -m set --match-set blacklist src -j DROP
+                echo "Blocked IP: $line"
+            # Check if the line contains a valid URL
+            elif [[ "$line" =~ ^http(s)?:// ]]; then
+                # Add the URL to a URL blocklist (replace with your method to block URLs)
+                echo "Blocked URL: $line"
+            # Check if the line contains a valid MD5 hash (32 hex characters)
+            elif [[ "$line" =~ ^[a-fA-F0-9]{32}$ ]]; then
+                # Process MD5 hash (e.g., add to your hash blocklist)
+                echo "Blocked MD5 hash: $line"
+            # Check if the line contains a valid SHA1 hash (40 hex characters)
+            elif [[ "$line" =~ ^[a-fA-F0-9]{40}$ ]]; then
+                # Process SHA1 hash (e.g., add to your hash blocklist)
+                echo "Blocked SHA1 hash: $line"
+            # Check if the line contains a valid SHA256 hash (64 hex characters)
+            elif [[ "$line" =~ ^[a-fA-F0-9]{64}$ ]]; then
+                # Process SHA256 hash (e.g., add to your hash blocklist)
+                echo "Blocked SHA256 hash: $line"
+            fi
+        done
+    done
+}
+
+initialize_ipset() {
+    ipset list blacklist 2>/dev/null || ipset create blacklist hash:ip
+}
+
+configure_fw(){
+    sudo apt install iptables-persistent -y
+    sudo netfilter-persistent save
+    sudo netfilter-persistent reload
+
+    sudo apt install ipset -y
+    sudo apt install psad -y
+    sudo psad --sig-update
+    sudo systemctl restart psad
+
+    sudo sed -i '/^ENABLE_AUTO_IDS/c\ENABLE_AUTO_IDS Y;' /etc/psad/psad.conf
+    sudo sed -i '/^AUTO_IDS_TCP_PORTS/c\AUTO_IDS_TCP_PORTS any;' /etc/psad/psad.conf
+    sudo sed -i '/^AUTO_IDS_UDP_PORTS/c\AUTO_IDS_UDP_PORTS any;' /etc/psad/psad.conf
+
+    sudo iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    sudo iptables -A INPUT -p tcp --dport 22 -j ACCEPT  # Allow SSH
+    sudo iptables -A INPUT -j DROP
+    iptables -A INPUT -p tcp --dport 22 -m limit --limit 3/min --limit-burst 5 -j ACCEPT
+    iptables -A INPUT -j LOG --log-prefix "Dropped: " --log-level 4
+    iptables -A INPUT -m conntrack --ctstate INVALID -j DROP
+
+    # Improved Intrusion Prevention
+    sudo iptables -A INPUT -p tcp --dport 22 -i eth0 -m recent --set --name SSH
+    sudo iptables -A INPUT -p tcp --dport 22 -i eth0 -m recent --rcheck --seconds 60 --hitcount 5 -j DROP
+
+    # Use iptables sets
+    ipset create myset hash:ip
+    ipset add myset 192.168.1.1
+    iptables -A INPUT -m set --match-set myset src -j ACCEPT
+
+    iptables-save >/etc/iptables/rules.v4
+    fetch_threat_feed
+}
+
+configure_network_kernel(){
+    sysctl -w net.netfilter.nf_conntrack_max=262144
+    sysctl -w net.ipv4.tcp_fin_timeout=30
+    sysctl -w net.core.rmem_max=16777216
+    sysctl -w net.core.wmem_max=16777216
+    sysctl -w net.ipv4.tcp_syncookies=1
+    sysctl -w fs.file-max=1000000
+    ulimit -n 65535
+
+    # Disable Source Routed Packets
+    sysctl -w net.ipv4.conf.all.accept_source_route=0
+    sysctl -w net.ipv4.conf.default.accept_source_route=0
+
+    # Disable IP Spoofing Protection
+    sysctl -w net.ipv4.conf.all.rp_filter=1
+    sysctl -w net.ipv4.conf.default.rp_filter=1
+
+    # Disable ICMP Redirect Acceptance
+    sysctl -w net.ipv4.conf.all.accept_redirects=0
+    sysctl -w net.ipv4.conf.default.accept_redirects=0
+
+    # Log Suspicious Packets
+    sysctl -w net.ipv4.conf.all.log_martians=1
+    sysctl -w net.ipv4.conf.default.log_martians=1
+
+    # Tune TCP Buffer Sizes
+    sysctl -w net.ipv4.tcp_rmem="4096 87380 16777216"
+    sysctl -w net.ipv4.tcp_wmem="4096 16384 16777216"
+
+    # Enable TCP Fast Open
+    sysctl -w net.ipv4.tcp_fastopen=3
+
+    # Increase the Maximum Number of TCP Connections
+    sysctl -w net.ipv4.tcp_max_syn_backlog=4096
+
+    # Performance Tuning for Multi-core Processors
+    sysctl -w kernel.numa_balancing=0
+
+    # Enable IP Forwarding
+    sysctl -w net.ipv4.ip_forward=1
+
+    # Disable IPv6 (if not using IPv6)
+    sysctl -w net.ipv6.conf.all.disable_ipv6=1
+    sysctl -w net.ipv6.conf.default.disable_ipv6=1
+
+    # Increase the Maximum Number of Network Connections
+    sysctl -w net.core.somaxconn=1024
+}
+
+configure_service_manager(){
+    sudo apt install fail2ban -y
+    cd /etc/fail2ban/
+    sudo cp jail.conf jail.local
+
+    sudo sed -i '/^ignoreip/c\ignoreip = 127.0.0.1/8 ::1 123.123.123.123 192.168.1.0/24' /etc/fail2ban/jail.local
+    sudo sed -i '/^bantime/c\bantime  = 1d' /etc/fail2ban/jail.local
+    sudo sed -i '/^findtime/c\findtime  = 10m' /etc/fail2ban/jail.local
+    sudo sed -i '/^maxretry/c\maxretry = 5' /etc/fail2ban/jail.local
+    sudo sed -i '/^action/c\action = %(action_mw)s' /etc/fail2ban/jail.local
+
+    sudo sed -i '/^\[proftpd\]/!a [proftpd]\nenabled  = true\nport     = ftp,ftp-data,ftps,ftps-data\nlogpath  = %(proftpd_log)s\nbackend  = %(proftpd_backend)s' /etc/fail2ban/jail.local
+    sudo sed -i '/^\[sshd\]/!a [sshd]\nenabled   = true\nmaxretry  = 3\nfindtime  = 1d\nbantime   = 4w\nignoreip  = 127.0.0.1/8 23.34.45.56' /etc/fail2ban/jail.local
+}
+
+configure_ids(){
+    # Zeek installation and configuration
+    sudo apt update -y
+    sudo apt install curl gnupg2 wget git -y
+    curl -fsSL https://download.opensuse.org/repositories/security:zeek/xUbuntu_22.04/Release.key | gpg --dearmor | tee /etc/apt/trusted.gpg.d/security_zeek.gpg
+    echo 'deb http://download.opensuse.org/repositories/security:/zeek/xUbuntu_22.04/ /' | tee /etc/apt/sources.list.d/security:zeek.list
+    sudo apt update -y
+    sudo apt install zeek -y
+    echo "export PATH=\$PATH:/opt/zeek/bin" >> ~/.bashrc
+    source ~/.bashrc
+    git clone https://github.com/zeek/bro-scripts /opt/zeek/bro-scripts
+    git clone https://github.com/michalpurzynski/zeek-scripts /opt/zeek/zeek-scripts
+    echo "export ZEEK_SCRIPT_PATH=\$ZEEK_SCRIPT_PATH:/opt/zeek/bro-scripts:/opt/zeek/zeek-scripts" >> ~/.bashrc
+    source ~/.bashrc
+    echo '@load /opt/zeek/bro-scripts/*' >> /opt/zeek/share/zeek/site/local.zeek
+    echo '@load /opt/zeek/zeek-scripts/*' >> /opt/zeek/share/zeek/site/local.zeek
+    sudo zeekctl restart
+
+    # Snort installation and configuration
+    sudo apt update
+    sudo apt upgrade -y
+    sudo apt install build-essential libpcap-dev libpcre3-dev \
+        libnet1-dev zlib1g-dev luajit hwloc libdnet-dev \
+        libdumbnet-dev bison flex liblzma-dev openssl libssl-dev \
+        pkg-config libhwloc-dev cmake cpputest libsqlite3-dev uuid-dev \
+        libcmocka-dev libnetfilter-queue-dev libmnl-dev autotools-dev \
+        libluajit-5.1-dev libunwind-dev libfl-dev -y
+
+    cd /tmp
+    mkdir snort-source-files && cd snort-source-files
+    git clone https://github.com/snort3/libdaq.git
+    cd libdaq
+    ./bootstrap
+    ./configure
+    make
+    sudo make install
+
+    cd ../
+    wget https://github.com/gperftools/gperftools/releases/download/gperftools-2.9.1/gperftools-2.9.1.tar.gz
+    tar xzf gperftools-2.9.1.tar.gz
+    cd gperftools-2.9.1/
+    ./configure
+    make
+    sudo make install
+
+    cd ../
+    wget https://github.com/snort3/snort3/archive/refs/tags/3.1.28.0.tar.gz
+    tar xzf 3.1.28.0.tar.gz
+    cd snort3-3.1.28.0
+    ./configure_cmake.sh --prefix=/usr/local --enable-tcmalloc
+    cd build
+    make
+    sudo make install
+    sudo ldconfig
+
+    network_interface=`ifconfig -a | grep "enp" | cut -d":" -f1`
+    sudo apt install ethtool -y
+    ethtool -K $network_interface gro off lro off
+
+    echo """
+[Unit]
+Description=Set Snort 3 NIC in promiscuous mode and Disable GRO, LRO on boot
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ip link set dev enp0s8 promisc on
+ExecStartPost=/usr/sbin/ethtool -K enp0s8 gro off lro off
+TimeoutStartSec=0
+RemainAfterExit=yes
+
+[Install]
+WantedBy=default.target""" | sudo tee /etc/systemd/system/snort3.service > /dev/null
+
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now snort3.service
+
+    sudo mkdir /usr/local/etc/rules
+    cd /tmp
+    wget https://www.snort.org/downloads/community/snort3-community-rules.tar.gz
+    tar xvf snort3-community-rules.tar.gz
+    sudo cp -rvf snort3-community-rules /usr/local/etc/rules
+
+    # Maltrail installation
+    sudo apt-get install git python3 python3-dev python3-pip python-is-python3 libpcap-dev build-essential procps schedtool
+    sudo pip3 install pcapy-ng
+    git clone --depth 1 https://github.com/stamparm/maltrail.git
+    cd maltrail
+    sudo python3 sensor.py
+}
+
+configure_av(){
+    # ClamAV installation
+    sudo apt update -y
+    sudo apt install clamav -y
+    sudo systemctl stop clamav-freshclam
+    sudo freshclam
+    sudo systemctl start clamav-freshclam
+    (crontab -l 2>/dev/null; echo "0 2 * * * /usr/bin/clamscan --remove --recursive --infected / --exclude-dir=\"^/sys\" --exclude-dir=\"^/proc\" --log=/var/log/clamav-scan.log") | sudo crontab -
+
+    # Maldet installation
+    sudo apt update -y
+    sudo apt install wget tar -y
+    cd /tmp
+    wget http://www.rfxn.com/downloads/maldetect-current.tar.gz
+    tar xfz maldetect-current.tar.gz
+    cd maldetect-1.6.*
+    sudo ./install.sh
+    cd
+    sudo cp /usr/local/maldetect/conf.maldet /usr/local/maldetect/conf.maldet.backup
+    sudo sed -i 's/^email_alert="0"/email_alert="1"/' /usr/local/maldetect/conf.maldet
+    sudo sed -i 's/^email_addr=""/email_addr="you@domain.com"/' /usr/local/maldetect/conf.maldet
+    sudo sed -i 's/^autoupdate_signatures="0"/autoupdate_signatures="1"/' /usr/local/maldetect/conf.maldet
+    sudo sed -i 's/^autoupdate_version="0"/autoupdate_version="1"/' /usr/local/maldetect/conf.maldet
+    sudo sed -i 's/^cron_daily_scan="0"/cron_daily_scan="1"/' /usr/local/maldetect/conf.maldet
+    sudo sed -i 's/^scan_user_access="0"/scan_user_access="1"/' /usr/local/maldetect/conf.maldet
+    sudo sed -i 's/^quarantine_hits="0"/quarantine_hits="1"/' /usr/local/maldetect/conf.maldet
+    sudo sed -i 's/^quarantine_clean="0"/quarantine_clean="0"/' /usr/local/maldetect/conf.maldet
+    sudo sed -i 's/^quarantine_suspend_user="0"/quarantine_suspend_user="1"/' /usr/local/maldetect/conf.maldet
+    sudo sed -i 's/^quarantine_suspend_user_minuid="1000"/quarantine_suspend_user_minuid="500"/' /usr/local/maldetect/conf.maldet
+    sudo sed -i 's/^scan_clamscan="0"/scan_clamscan="1"/' /usr/local/maldetect/conf.maldet
+    sudo sed -i 's/^scan_ignore_root="1"/scan_ignore_root="0"/' /usr/local/maldetect/conf.maldet
+    echo "0 2 * * * /usr/local/maldetect/maldet --scan-all / --quiet --log-file=/var/log/maldet-scan.log" | sudo tee -a /etc/crontab
+    sudo /usr/local/sbin/maldet --mkpubpaths
+
+    # Rkhunter installation
+    sudo apt update -y
+    sudo apt install rkhunter -y
+    sudo cp /etc/rkhunter.conf /etc/rkhunter.conf.backup
+    sudo sed -i 's/^ALLOW_SSH_ROOT_USER=.*/ALLOW_SSH_ROOT_USER=0/' /etc/rkhunter.conf
+    sudo sed -i 's/^SCRIPTWHITELIST=.*/SCRIPTWHITELIST=\/usr\/bin\/prelink/' /etc/rkhunter.conf
+    echo "0 3 * * * /usr/bin/rkhunter --check --cronjob --report-warnings-only" | sudo tee -a /etc/crontab
+
+    # Chkrootkit installation
+    sudo apt install chkrootkit -y
+
+    # YARA installation
+    sudo apt install yara -y
+    git clone https://github.com/iomoath/yara-scanner.git
+    cd yara-scanner
+    virtualenv venv
+    source venv/bin/activate
+    pip3 install yara-python
+    python3 yara_main.py --update
+    deactivate
+    cd
+}
+
+configure_vul_scanner(){
+    sudo apt install lynis -y
+}
+
+update_av(){
+    sudo systemctl stop clamav-freshclam
+    sudo freshclam
+    sudo systemctl start clamav-freshclam
+    sudo /usr/local/sbin/maldet -u
+    sudo rkhunter --update
+}
+
+scan_av(){
+    sudo clamscan --remove --infected --recursive --verbose /
+    sudo maldet -a
+    sudo rkhunter --check --skip-keypress
+    sudo chkrootkit
+    cd yara-scanner
+    source venv/bin/activate
+    python yara_main.py --scan-dir '/' --verbose
+    deactivate
+}
+
+vul_check(){
+    sudo lynis audit system
+}
+
+configure_monitoring(){
+
+## netdata
+
+# Update the package list and upgrade existing packages
+echo "Updating package list and upgrading packages..."
+sudo apt update -y
+sudo apt upgrade -y
+
+# Install Netdata
+echo "Installing Netdata..."
+sudo apt install netdata -y
+
+# Configure Netdata to bind to a public IP (replace 0.0.0.0 with actual IP if needed)
+echo "Configuring Netdata to bind to a public IP..."
+
+# Get the server's public IP address
+PUBLIC_IP=$(hostname -I | awk '{print $1}')
+
+# Backup the original Netdata configuration file
+sudo cp /etc/netdata/netdata.conf /etc/netdata/netdata.conf.backup
+
+# Modify the netdata configuration file to bind to the public IP address
+sudo sed -i "s/^bind socket to IP = 127.0.0.1$/bind socket to IP = $PUBLIC_IP/" /etc/netdata/netdata.conf
+
+# Restart the Netdata service to apply the changes
+echo "Restarting Netdata service..."
+sudo systemctl restart netdata
+
+# Confirm the status of the Netdata service
+echo "Netdata installation and configuration complete. Verifying service status..."
+sudo systemctl status netdata | grep "active (running)"
+
+# Allow port 19999 through the firewall using iptables
+echo "Configuring iptables to allow traffic on port 19999..."
+
+# Add iptables rule to allow traffic on port 19999
+sudo iptables -A INPUT -p tcp --dport 19999 -j ACCEPT
+
+# Save the iptables rule to persist on reboot (depending on your system's iptables-persistent setup)
+echo "Saving iptables rules to persist on reboot..."
+sudo sh -c 'iptables-save > /etc/iptables/rules.v4'
+
+# Check the iptables status to confirm the rule is applied
+echo "Checking iptables status..."
+sudo iptables -L -n
+
+# Display Netdata Dashboard URL
+echo "Netdata is now installed and configured."
+echo "You can access the Netdata dashboard by opening the following URL in your browser:"
+echo "http://$PUBLIC_IP:19999"
+
+}
+
+system_hardening(){
+    # Secure SSH by disabling root login
+    sudo sed -i 's/^#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config
+    sudo systemctl restart sshd
+
+    # Enable Automatic Updates
+    sudo apt install unattended-upgrades -y
+    sudo dpkg-reconfigure unattended-upgrades
+    sudo systemctl enable unattended-upgrades
+    sudo systemctl start unattended-upgrades
+}
+
+update_system(){
+    echo "Updating system packages..."
+    sudo apt update -y
+    sudo apt upgrade -y
+    sudo apt autoremove -y
+    echo "System update completed."
+}
+
+manage_service(){
+    service_name=$1
+    action=$2
+    
+    case $action in
+        --start)
+            sudo systemctl start $service_name
+            echo "Started $service_name"
+            ;;
+        --stop)
+            sudo systemctl stop $service_name
+            echo "Stopped $service_name"
+            ;;
+        --restart)
+            sudo systemctl restart $service_name
+            echo "Restarted $service_name"
+            ;;
+        --status)
+            sudo systemctl status $service_name
+            ;;
+        *)
+            echo "Invalid action for service management"
+            help
+            ;;
+    esac
+}
+
+configure_load_balancing(){
+    echo "Configuring load balancing..."
+    
+    # Install required packages
+    sudo apt install -y nginx haproxy ipvsadm keepalived
+    
+    # Basic Nginx load balancing configuration
+    echo "Creating Nginx load balancer configuration..."
+    sudo tee /etc/nginx/conf.d/load-balancer.conf > /dev/null <<EOL
+upstream backend {
+    least_conn;
+    server backend1.example.com;
+    server backend2.example.com;
+    server backend3.example.com;
+}
+
+server {
+    listen 80;
+    
+    location / {
+        proxy_pass http://backend;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    }
+}
+EOL
+
+    # Basic HAProxy configuration
+    echo "Creating HAProxy configuration..."
+    sudo tee /etc/haproxy/haproxy.cfg > /dev/null <<EOL
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
+
+defaults
+    log global
+    mode http
+    option httplog
+    option dontlognull
+    timeout connect 5000
+    timeout client 50000
+    timeout server 50000
+
+frontend http_front
+    bind *:80
+    stats uri /haproxy?stats
+    default_backend http_back
+
+backend http_back
+    balance roundrobin
+    server backend1 backend1.example.com:80 check
+    server backend2 backend2.example.com:80 check
+    server backend3 backend3.example.com:80 check
+EOL
+
+    # Enable and restart services
+    sudo systemctl enable nginx haproxy keepalived
+    sudo systemctl restart nginx haproxy keepalived
+    
+    echo "Load balancing configuration complete."
+    echo "Nginx and HAProxy have been configured with basic load balancing setups."
+}
+
+help(){
+echo "--------------- HELP ---------------"
+echo "SYSTEM MANAGEMENT:"
+echo "--update : Update and upgrade all system packages"
+echo "--service-manager --service <service_name> --start/--stop/--restart/--status : Manage system services"
+
+echo "CONFIGURATION:"
+echo "--configure"
+echo -e "\t--firewall : Configure firewall tools"
+echo -e "\t--kernel : Configure kernel parameters"
+echo -e "\t--service-manager : Configure Fail2Ban"
+echo -e "\t--ids/ips : Configure Zeek, Snort, and Maltrail"
+echo -e "\t--av : Configure ClamAV, Maldet, RKhunter, chkrootkit, and Yara"
+echo -e "\t--monitoring : Configure Netdata (access at IP:19999)"
+echo -e "\t--hardening : Harden system security"
+echo -e "\t--vul : Configure vulnerability check tools"
+echo -e "\t--load-balancing : Configure load balancing (Nginx, HAProxy)"
+
+echo "IDS/IPS:"
+echo "--ids/ips --add-rule '<rule>' : Add custom rule for Snort"
+
+echo "ANTIVIRUS:"
+echo "--av --scan : Run complete antivirus scan (ClamAV, Maldet, Rkhunter, chkrootkit, YARA)"
+echo "--av --update : Update antivirus databases"
+
+echo "VULNERABILITY:"
+echo "--vulcheck : Scan for vulnerabilities with Lynis"
+
+echo "LOAD BALANCING:"
+echo "--configure --load-balancing : Configure load balancing services"
+}
+
+# Main command parser
+case $1 in
+    --configure)
+        case $2 in
+            --firewall)
+                configure_basic
+                configure_fw
+                email_alerts
+                ;;
+            --kernel)
+                configure_basic
+                configure_network_kernel
+                ;;
+            --service-manager)
+                configure_basic
+                configure_service_manager
+                ;;
+            --ids/ips)
+                configure_basic
+                configure_ids
+                ;;
+            --av)
+                configure_basic
+                configure_av
+                email_alerts
+                ;;
+            --monitoring)
+                configure_basic
+                configure_monitoring
+                ;;
+            --hardening)
+                configure_basic
+                system_hardening
+                ;;
+            --vul)
+                configure_basic
+                configure_vul_scanner
+                ;;
+            --load-balancing)
+                configure_basic
+                configure_load_balancing
+                ;;
+            *)
+                help
+                ;;
+        esac
+        ;;
+    --ids/ips)
+        if [ "$2" == "--add-rule" ]; then
+            rule="$3"
+            echo "$rule" | sudo tee -a /usr/local/etc/rules/local.rules
+            echo "Rule added to custom rules [OK]"
+        else
+            help
+        fi
+        ;;
+    --av)
+        case $2 in
+            --scan)
+                scan_av
+                ;;
+            --update)
+                update_av
+                ;;
+            *)
+                help
+                ;;
+        esac
+        ;;
+    --vulcheck)
+        vul_check
+        ;;
+    --update)
+        update_system
+        ;;
+    --service-manager)
+        if [ "$2" == "--service" ] && [ -n "$3" ]; then
+            manage_service "$3" "$4"
+        else
+            help
+        fi
+        ;;
+    --help)
+        help
+        ;;
+    *)
+        help
+        ;;
+esac
